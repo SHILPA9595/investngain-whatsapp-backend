@@ -1,19 +1,17 @@
-
 const express = require("express");
 const axios = require("axios");
 
 const app = express();
-
 app.use(express.json());
 
-const PORT = 3000;
-
-// Meta Webhook Verify Token
+const PORT = process.env.PORT || 3000;
 const VERIFY_TOKEN = "investngain_webhook_2026";
-
-// WhatsApp Cloud API credentials
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
-const PHONE_NUMBER_ID = "1400740626455918";
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+
+// Temporary storage for customers who reply.
+// Note: data resets when the server restarts.
+const repliedCustomers = new Map();
 
 // Home page
 app.get("/", (req, res) => {
@@ -28,19 +26,64 @@ app.get("/webhook", (req, res) => {
 
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
         console.log("Webhook verified successfully!");
-        res.status(200).send(challenge);
-    } else {
-        console.log("Webhook verification failed!");
-        res.sendStatus(403);
+        return res.status(200).send(challenge);
     }
+
+    return res.sendStatus(403);
 });
 
-// Receive WhatsApp webhook events
+// Receive incoming WhatsApp messages
 app.post("/webhook", (req, res) => {
-    console.log("WhatsApp webhook received:");
-    console.log(JSON.stringify(req.body, null, 2));
+    try {
+        const entries = req.body?.entry || [];
 
-    res.sendStatus(200);
+        for (const entry of entries) {
+            for (const change of entry.changes || []) {
+                const value = change.value || {};
+                const messages = value.messages || [];
+
+                for (const message of messages) {
+                    const customer = message.from;
+
+                    if (customer) {
+                        repliedCustomers.set(customer, {
+                            stopped: true,
+                            repliedAt: new Date().toISOString(),
+                            messageType: message.type
+                        });
+
+                        console.log(
+                            "Customer replied; follow-up marked stopped:",
+                            customer
+                        );
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Webhook processing error:", error.message);
+    }
+
+    return res.sendStatus(200);
+});
+
+// Check whether a customer has replied
+app.get("/followup-status", (req, res) => {
+    const recipient = (req.query.recipient || "").replace(/\D/g, "");
+
+    if (!recipient) {
+        return res.status(400).json({
+            error: "Please provide a recipient number."
+        });
+    }
+
+    const record = repliedCustomers.get(recipient);
+
+    return res.json({
+        recipient,
+        stopFollowUp: Boolean(record),
+        details: record || null
+    });
 });
 
 // Send WhatsApp text message
@@ -54,6 +97,12 @@ app.post("/send-message", async (req, res) => {
             });
         }
 
+        if (!PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+            return res.status(500).json({
+                error: "WhatsApp credentials are not configured in Render."
+            });
+        }
+
         const response = await axios.post(
             `https://graph.facebook.com/v26.0/${PHONE_NUMBER_ID}/messages`,
             {
@@ -61,9 +110,7 @@ app.post("/send-message", async (req, res) => {
                 recipient_type: "individual",
                 to: recipient,
                 type: "text",
-                text: {
-                    body: message
-                }
+                text: { body: message }
             },
             {
                 headers: {
@@ -73,23 +120,22 @@ app.post("/send-message", async (req, res) => {
             }
         );
 
-        console.log("WhatsApp message sent:", response.data);
-
-        res.status(200).json(response.data);
+        console.log("WhatsApp text message sent.");
+        return res.status(200).json(response.data);
 
     } catch (error) {
         console.error(
-            "WhatsApp message error:",
+            "Send message error:",
             error.response?.data || error.message
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             error: error.response?.data || error.message
         });
     }
 });
 
-// Send WhatsApp template message
+// Send approved WhatsApp template
 app.post("/send-template", async (req, res) => {
     try {
         const { recipient } = req.body;
@@ -97,6 +143,12 @@ app.post("/send-template", async (req, res) => {
         if (!recipient) {
             return res.status(400).json({
                 error: "recipient is required"
+            });
+        }
+
+        if (!PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+            return res.status(500).json({
+                error: "WhatsApp credentials are not configured in Render."
             });
         }
 
@@ -108,10 +160,8 @@ app.post("/send-template", async (req, res) => {
                 to: recipient,
                 type: "template",
                 template: {
-                    name: "hello_world",
-                    language: {
-                        code: "en_US"
-                    }
+                    name: "lead_followup_test",
+                    language: { code: "en_US" }
                 }
             },
             {
@@ -122,17 +172,16 @@ app.post("/send-template", async (req, res) => {
             }
         );
 
-        console.log("WhatsApp template sent:", response.data);
-
-        res.status(200).json(response.data);
+        console.log("WhatsApp template message sent.");
+        return res.status(200).json(response.data);
 
     } catch (error) {
         console.error(
-            "WhatsApp template error:",
+            "Send template error:",
             error.response?.data || error.message
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             error: error.response?.data || error.message
         });
     }
@@ -140,5 +189,5 @@ app.post("/send-template", async (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
