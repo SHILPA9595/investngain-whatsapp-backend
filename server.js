@@ -18,9 +18,7 @@ app.get("/", (req, res) => {
     res.send("Invest N Gain WhatsApp Backend is running!");
 });
 
-
-
- // Meta webhook verification
+// Meta webhook verification
 app.get("/webhook", (req, res) => {
     console.log("Webhook verification request received");
 
@@ -36,10 +34,11 @@ app.get("/webhook", (req, res) => {
         return res.status(200).send(challenge);
     }
 
-    console.log("Webhook verification failed: mode, token, or challenge mismatch");
+    console.log(
+        "Webhook verification failed: mode, token, or challenge mismatch"
+    );
     return res.sendStatus(403);
 });
-
 
 // Receive incoming WhatsApp messages
 app.post("/webhook", (req, res) => {
@@ -179,7 +178,7 @@ app.post("/send-template", async (req, res) => {
                 to: recipient,
                 type: "template",
                 template: {
-                    name: "lead_followup_test",
+                    name: "hello_world",
                     language: { code: "en_US" }
                 }
             },
@@ -209,3 +208,4 @@ app.post("/send-template", async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
