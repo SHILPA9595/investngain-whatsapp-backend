@@ -18,19 +18,28 @@ app.get("/", (req, res) => {
     res.send("Invest N Gain WhatsApp Backend is running!");
 });
 
-// Meta webhook verification
+
+
+ // Meta webhook verification
 app.get("/webhook", (req, res) => {
+    console.log("Webhook verification request received");
+
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
 
-    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+    console.log("Verification mode:", mode);
+    console.log("Challenge received:", Boolean(challenge));
+
+    if (mode === "subscribe" && token === VERIFY_TOKEN && challenge) {
         console.log("Webhook verified successfully!");
         return res.status(200).send(challenge);
     }
 
+    console.log("Webhook verification failed: mode, token, or challenge mismatch");
     return res.sendStatus(403);
 });
+
 
 // Receive incoming WhatsApp messages
 app.post("/webhook", (req, res) => {
