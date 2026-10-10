@@ -1,3 +1,4 @@
+
 const express = require("express");
 const axios = require("axios");
 
@@ -9,8 +10,7 @@ const VERIFY_TOKEN = "investngain_webhook_2026";
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
-// Temporary storage for customers who reply.
-// Note: data resets when the server restarts.
+// Temporary storage; records reset when the server restarts.
 const repliedCustomers = new Map();
 
 // Home page
@@ -43,13 +43,24 @@ app.get("/webhook", (req, res) => {
 
 // Receive incoming WhatsApp messages
 app.post("/webhook", (req, res) => {
+    console.log("Webhook POST received");
+
     try {
         const entries = req.body?.entry || [];
+        console.log("Webhook entries:", entries.length);
 
         for (const entry of entries) {
             for (const change of entry.changes || []) {
                 const value = change.value || {};
+
+                console.log("Webhook field:", change.field);
+                console.log(
+                    "Phone number ID:",
+                    value.metadata?.phone_number_id || "missing"
+                );
+
                 const messages = value.messages || [];
+                console.log("Incoming messages:", messages.length);
 
                 for (const message of messages) {
                     const customer = message.from;
@@ -131,7 +142,6 @@ app.post("/send-message", async (req, res) => {
 
         console.log("WhatsApp text message sent.");
         return res.status(200).json(response.data);
-
     } catch (error) {
         console.error(
             "Send message error:",
@@ -183,7 +193,6 @@ app.post("/send-template", async (req, res) => {
 
         console.log("WhatsApp template message sent.");
         return res.status(200).json(response.data);
-
     } catch (error) {
         console.error(
             "Send template error:",
