@@ -16,7 +16,7 @@ const ENABLE_BULK_SENDING =
     process.env.ENABLE_BULK_SENDING === "true";
 
 const TEMPLATE_NAME = "property_update_investngain";
-const TEMPLATE_LANGUAGE = "en_US";
+const TEMPLATE_LANGUAGE = "en";
 const MAX_RECIPIENTS = 100;
 const MESSAGE_DELAY_MS = 1000;
 
