@@ -6,7 +6,6 @@ const crypto = require("crypto");
 const { parse } = require("csv-parse/sync");
 
 const app = express();
-
 const PORT = process.env.PORT || 3000;
 const VERIFY_TOKEN =
     process.env.VERIFY_TOKEN || "investngain_webhook_2026";
