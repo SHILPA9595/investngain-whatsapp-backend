@@ -322,6 +322,8 @@ app.post(
     verifyMetaSignature,
     async (req, res) => {
         try {
+            console.log("WEBHOOK DEBUG:", Object.keys(req.body || {}));
+
             const entries = req.body?.entry || [];
 
             for (const entry of entries) {
