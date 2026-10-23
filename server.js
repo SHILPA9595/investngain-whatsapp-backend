@@ -2,16 +2,23 @@
 const express = require("express");
 const axios = require("axios");
 const multer = require("multer");
+const crypto = require("crypto");
 const { parse } = require("csv-parse/sync");
 
 const app = express();
-app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-const VERIFY_TOKEN = "investngain_webhook_2026";
+const VERIFY_TOKEN =
+    process.env.VERIFY_TOKEN || "investngain_webhook_2026";
+
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
+const META_APP_SECRET = process.env.META_APP_SECRET;
+
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
+
 const ENABLE_BULK_SENDING =
     process.env.ENABLE_BULK_SENDING === "true";
 
@@ -20,7 +27,146 @@ const TEMPLATE_LANGUAGE = "en";
 const MAX_RECIPIENTS = 100;
 const MESSAGE_DELAY_MS = 1000;
 
-const repliedCustomers = new Map();
+// Preserve original request body for Meta signature verification.
+app.use(express.json({
+    limit: "1mb",
+    verify: (req, res, buffer) => {
+        req.rawBody = Buffer.from(buffer);
+    }
+}));
+
+// --------------------------------------------------
+// HELPERS
+// --------------------------------------------------
+
+function normalizePhone(value) {
+    return String(value || "").replace(/\D/g, "");
+}
+
+function validPhone(value) {
+    return /^\d{10,15}$/.test(value);
+}
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function requireAdmin(req, res, next) {
+    if (!ADMIN_API_KEY) {
+        return res.status(503).json({
+            error: "ADMIN_API_KEY is not configured."
+        });
+    }
+
+    const suppliedKey = req.get("x-admin-key");
+
+    if (!suppliedKey) {
+        return res.status(401).json({
+            error: "Admin key required."
+        });
+    }
+
+    const expected = Buffer.from(ADMIN_API_KEY);
+    const supplied = Buffer.from(suppliedKey);
+
+    if (
+        expected.length !== supplied.length ||
+        !crypto.timingSafeEqual(expected, supplied)
+    ) {
+        return res.status(401).json({
+            error: "Unauthorized."
+        });
+    }
+
+    next();
+}
+
+function requireWhatsAppConfig() {
+    if (!PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+        throw new Error("WhatsApp credentials are missing in Render.");
+    }
+}
+
+function requireSupabaseConfig() {
+    if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+        throw new Error("Supabase environment variables are missing.");
+    }
+}
+
+// --------------------------------------------------
+// SUPABASE DATABASE
+// --------------------------------------------------
+
+function supabaseHeaders(extra = {}) {
+    requireSupabaseConfig();
+
+    return {
+        apikey: SUPABASE_SECRET_KEY,
+        Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
+        "Content-Type": "application/json",
+        ...extra
+    };
+}
+
+function supabaseTableUrl() {
+    requireSupabaseConfig();
+
+    return (
+        SUPABASE_URL.replace(/\/$/, "") +
+        "/rest/v1/whatsapp_leads"
+    );
+}
+
+async function saveLeadToDatabase(customer, record) {
+    await axios.post(
+        `${supabaseTableUrl()}?on_conflict=phone`,
+        {
+            phone: customer,
+            lead_status: record.leadStatus,
+            stop_followup: record.stopped,
+            last_message_type: record.messageType,
+            last_reply_at: record.repliedAt,
+            updated_at: new Date().toISOString()
+        },
+        {
+            headers: supabaseHeaders({
+                Prefer: "resolution=merge-duplicates"
+            }),
+            timeout: 10000
+        }
+    );
+}
+
+async function getLeadFromDatabase(customer) {
+    const response = await axios.get(
+        supabaseTableUrl(),
+        {
+            params: {
+                phone: `eq.${customer}`,
+                select:
+                    "phone,lead_status,stop_followup,last_message_type,last_reply_at",
+                limit: 1
+            },
+            headers: supabaseHeaders(),
+            timeout: 10000
+        }
+    );
+
+    const lead = response.data?.[0];
+
+    if (!lead) return null;
+
+    return {
+        stopped: lead.stop_followup,
+        repliedAt: lead.last_reply_at,
+        messageType: lead.last_message_type,
+        leadStatus: lead.lead_status
+    };
+}
+
+// --------------------------------------------------
+// LEAD CLASSIFICATION
+// --------------------------------------------------
 
 function classifyLead(message) {
     const text = String(
@@ -46,54 +192,72 @@ function classifyLead(message) {
     return "NEEDS_REVIEW";
 }
 
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: 1 * 1024 * 1024,
-        files: 1
-    },
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype !== "text/csv" &&
-            !file.originalname.toLowerCase().endsWith(".csv")) {
-            return cb(new Error("Please upload a CSV file."));
-        }
-        cb(null, true);
-    }
-});
+// --------------------------------------------------
+// META WEBHOOK SECURITY
+// --------------------------------------------------
 
-function normalizePhone(value) {
-    return String(value || "").replace(/\D/g, "");
-}
-
-function validPhone(value) {
-    return /^\d{10,15}$/.test(value);
-}
-
-function requireAdmin(req, res, next) {
-    if (!ADMIN_API_KEY) {
+function verifyMetaSignature(req, res, next) {
+    if (!META_APP_SECRET) {
         return res.status(503).json({
-            error: "Bulk admin access is not configured in Render."
+            error: "META_APP_SECRET is not configured."
         });
     }
 
-    const suppliedKey = req.get("x-admin-key");
+    const signature = req.get("x-hub-signature-256");
 
-    if (!suppliedKey || suppliedKey !== ADMIN_API_KEY) {
-        return res.status(401).json({
-            error: "Unauthorized."
-        });
+    if (!signature || !/^sha256=[a-f0-9]{64}$/i.test(signature)) {
+        return res.sendStatus(403);
+    }
+
+    if (!req.rawBody) {
+        return res.sendStatus(403);
+    }
+
+    const expected =
+        "sha256=" +
+        crypto
+            .createHmac("sha256", META_APP_SECRET)
+            .update(req.rawBody)
+            .digest("hex");
+
+    const suppliedBuffer = Buffer.from(signature.toLowerCase());
+    const expectedBuffer = Buffer.from(expected);
+
+    if (
+        suppliedBuffer.length !== expectedBuffer.length ||
+        !crypto.timingSafeEqual(suppliedBuffer, expectedBuffer)
+    ) {
+        return res.sendStatus(403);
     }
 
     next();
 }
 
-function requireWhatsAppConfig() {
-    if (!PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
-        throw new Error(
-            "WhatsApp credentials are not configured in Render."
-        );
+// --------------------------------------------------
+// CSV UPLOAD
+// --------------------------------------------------
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 1024 * 1024,
+        files: 1
+    },
+    fileFilter: (req, file, cb) => {
+        if (
+            file.mimetype !== "text/csv" &&
+            !file.originalname.toLowerCase().endsWith(".csv")
+        ) {
+            return cb(new Error("Please upload a CSV file."));
+        }
+
+        cb(null, true);
     }
-}
+});
+
+// --------------------------------------------------
+// WHATSAPP TEMPLATE
+// --------------------------------------------------
 
 async function sendTemplate(recipient) {
     requireWhatsAppConfig();
@@ -107,7 +271,9 @@ async function sendTemplate(recipient) {
             type: "template",
             template: {
                 name: TEMPLATE_NAME,
-                language: { code: TEMPLATE_LANGUAGE }
+                language: {
+                    code: TEMPLATE_LANGUAGE
+                }
             }
         },
         {
@@ -120,24 +286,28 @@ async function sendTemplate(recipient) {
     );
 }
 
-function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
+// --------------------------------------------------
+// HOME
+// --------------------------------------------------
 
-// Home page
 app.get("/", (req, res) => {
     res.send("Invest N Gain WhatsApp Backend is running!");
 });
 
-// Verify Meta webhook
+// --------------------------------------------------
+// META WEBHOOK VERIFICATION
+// --------------------------------------------------
+
 app.get("/webhook", (req, res) => {
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
 
-    if (mode === "subscribe" &&
+    if (
+        mode === "subscribe" &&
         token === VERIFY_TOKEN &&
-        challenge) {
+        challenge
+    ) {
         console.log("Webhook verified successfully.");
         return res.status(200).send(challenge);
     }
@@ -145,138 +315,197 @@ app.get("/webhook", (req, res) => {
     return res.sendStatus(403);
 });
 
-// Receive WhatsApp messages and mark replies
-app.post("/webhook", (req, res) => {
-    try {
-        const entries = req.body?.entry || [];
+// --------------------------------------------------
+// RECEIVE CUSTOMER REPLIES
+// --------------------------------------------------
 
-        for (const entry of entries) {
-            for (const change of entry.changes || []) {
-                const value = change.value || {};
+app.post(
+    "/webhook",
+    verifyMetaSignature,
+    async (req, res) => {
+        try {
+            const entries = req.body?.entry || [];
 
-                for (const message of value.messages || []) {
-                    const customer = normalizePhone(message.from);
+            for (const entry of entries) {
+                for (const change of entry.changes || []) {
+                    const value = change.value || {};
 
-                  
-if (customer) {
-    const leadStatus = classifyLead(message);
+                    for (const message of value.messages || []) {
+                        const customer = normalizePhone(message.from);
 
-    repliedCustomers.set(customer, {
-        stopped: true,
-        repliedAt: new Date().toISOString(),
-        messageType: message.type,
-        leadStatus: leadStatus
-    });
+                        if (!validPhone(customer)) continue;
 
-    console.log(
-        "Customer reply recorded. Lead status:",
-        leadStatus
-    );
-}
+                        const leadStatus = classifyLead(message);
 
+                        const record = {
+                            stopped: true,
+                            repliedAt: new Date().toISOString(),
+                            messageType: message.type,
+                            leadStatus
+                        };
+
+                        await saveLeadToDatabase(customer, record);
+
+                        console.log(
+                            "Customer reply saved in Supabase:",
+                            customer,
+                            leadStatus
+                        );
+                    }
                 }
             }
+
+            return res.sendStatus(200);
+        } catch (error) {
+            console.error(
+                "Webhook processing error:",
+                error.response?.data || error.message
+            );
+
+            // Do not acknowledge a failed database write.
+            return res.sendStatus(500);
         }
-    } catch (error) {
-        console.error("Webhook processing error:", error.message);
     }
+);
 
-    // Meta expects a quick acknowledgement.
-    return res.sendStatus(200);
-});
+// --------------------------------------------------
+// FOLLOW-UP STATUS
+// --------------------------------------------------
 
-// Check whether a customer has replied
-app.get("/followup-status", (req, res) => {
-    const recipient = normalizePhone(req.query.recipient);
+app.get(
+    "/followup-status",
+    requireAdmin,
+    async (req, res) => {
+        try {
+            const recipient = normalizePhone(req.query.recipient);
 
-    if (!recipient) {
-        return res.status(400).json({
-            error: "Please provide a recipient number."
-        });
-    }
-
-    const record = repliedCustomers.get(recipient);
-
-    return res.json({
-        recipient,
-        stopFollowUp: Boolean(record),
-        details: record || null
-    });
-});
-
-// Send a normal text message
-app.post("/send-message", async (req, res) => {
-    try {
-        const recipient = normalizePhone(req.body.recipient);
-        const message = String(req.body.message || "").trim();
-
-        if (!validPhone(recipient) || !message) {
-            return res.status(400).json({
-                error: "A valid recipient number and message are required."
-            });
-        }
-
-        requireWhatsAppConfig();
-
-        const response = await axios.post(
-            `https://graph.facebook.com/v26.0/${PHONE_NUMBER_ID}/messages`,
-            {
-                messaging_product: "whatsapp",
-                recipient_type: "individual",
-                to: recipient,
-                type: "text",
-                text: { body: message }
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                    "Content-Type": "application/json"
-                },
-                timeout: 20000
+            if (!validPhone(recipient)) {
+                return res.status(400).json({
+                    error: "Provide a valid recipient number."
+                });
             }
-        );
 
-        return res.status(200).json(response.data);
-    } catch (error) {
-        console.error(
-            "Send message error:",
-            error.response?.data || error.message
-        );
+            const record = await getLeadFromDatabase(recipient);
 
-        return res.status(500).json({
-            error: error.response?.data || error.message
-        });
-    }
-});
+            return res.json({
+                recipient,
+                stopFollowUp: Boolean(record?.stopped),
+                details: record
+            });
+        } catch (error) {
+            console.error(
+                "Follow-up status error:",
+                error.response?.data || error.message
+            );
 
-// Send one approved template
-app.post("/send-template", async (req, res) => {
-    try {
-        const recipient = normalizePhone(req.body.recipient);
-
-        if (!validPhone(recipient)) {
-            return res.status(400).json({
-                error: "A valid recipient number is required."
+            return res.status(500).json({
+                error: "Could not retrieve lead status."
             });
         }
-
-        const response = await sendTemplate(recipient);
-        return res.status(200).json(response.data);
-    } catch (error) {
-        console.error(
-            "Send template error:",
-            error.response?.data || error.message
-        );
-
-        return res.status(500).json({
-            error: error.response?.data || error.message
-        });
     }
-});
+);
 
-// Bulk template send from CSV.
-// Disabled unless ENABLE_BULK_SENDING=true in Render.
-// Requires x-admin-key and a CSV with phone,consent columns.
+// --------------------------------------------------
+// SEND NORMAL MESSAGE
+// --------------------------------------------------
+
+app.post(
+    "/send-message",
+    requireAdmin,
+    async (req, res) => {
+        try {
+            const recipient = normalizePhone(req.body.recipient);
+            const message = String(req.body.message || "").trim();
+
+            if (!validPhone(recipient) || !message) {
+                return res.status(400).json({
+                    error: "Valid recipient and message are required."
+                });
+            }
+
+            requireWhatsAppConfig();
+
+            const response = await axios.post(
+                `https://graph.facebook.com/v26.0/${PHONE_NUMBER_ID}/messages`,
+                {
+                    messaging_product: "whatsapp",
+                    recipient_type: "individual",
+                    to: recipient,
+                    type: "text",
+                    text: {
+                        body: message
+                    }
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                        "Content-Type": "application/json"
+                    },
+                    timeout: 20000
+                }
+            );
+
+            return res.status(200).json(response.data);
+        } catch (error) {
+            console.error(
+                "Send message error:",
+                error.response?.data || error.message
+            );
+
+            return res.status(500).json({
+                error: error.response?.data || error.message
+            });
+        }
+    }
+);
+
+// --------------------------------------------------
+// SEND ONE TEMPLATE
+// --------------------------------------------------
+
+app.post(
+    "/send-template",
+    requireAdmin,
+    async (req, res) => {
+        try {
+            const recipient = normalizePhone(req.body.recipient);
+
+            if (!validPhone(recipient)) {
+                return res.status(400).json({
+                    error: "Valid recipient number required."
+                });
+            }
+
+            // Respect permanent follow-up stop status.
+            const lead = await getLeadFromDatabase(recipient);
+
+            if (lead?.stopped) {
+                return res.status(409).json({
+                    error: "Customer has already replied.",
+                    leadStatus: lead.leadStatus
+                });
+            }
+
+            const response = await sendTemplate(recipient);
+
+            return res.status(200).json(response.data);
+        } catch (error) {
+            console.error(
+                "Send template error:",
+                error.response?.data || error.message
+            );
+
+            return res.status(500).json({
+                error: error.response?.data || error.message
+            });
+        }
+    }
+);
+
+// --------------------------------------------------
+// BULK TEMPLATE SENDING
+// --------------------------------------------------
+
 app.post(
     "/bulk-template",
     requireAdmin,
@@ -284,13 +513,13 @@ app.post(
     async (req, res) => {
         if (!ENABLE_BULK_SENDING) {
             return res.status(403).json({
-                error: "Bulk sending is disabled. Enable it only after the template is approved and testing is complete."
+                error: "Bulk sending is disabled in Render."
             });
         }
 
         if (!req.file) {
             return res.status(400).json({
-                error: "Upload a CSV file in the 'file' field."
+                error: "Upload CSV in the 'file' field."
             });
         }
 
@@ -305,28 +534,29 @@ app.post(
             });
         } catch (error) {
             return res.status(400).json({
-                error: "Could not read CSV. Check the file format."
+                error: "Invalid CSV format."
             });
         }
 
         if (!rows.length) {
             return res.status(400).json({
-                error: "The CSV contains no client rows."
+                error: "CSV has no customer rows."
             });
         }
 
-        const headers = Object.keys(rows[0]).map(h =>
-            h.trim().toLowerCase()
+        const headers = Object.keys(rows[0]).map(
+            header => header.trim().toLowerCase()
         );
 
-        if (!headers.includes("phone") ||
-            !headers.includes("consent")) {
+        if (
+            !headers.includes("phone") ||
+            !headers.includes("consent")
+        ) {
             return res.status(400).json({
                 error: "CSV must contain phone and consent columns."
             });
         }
 
-        // Validate the entire list before sending anything.
         const seen = new Set();
         const recipients = [];
         let skipped = 0;
@@ -339,15 +569,18 @@ app.post(
             }
 
             const phone = normalizePhone(normalizedRow.phone);
+
             const consent = String(
                 normalizedRow.consent || ""
             ).trim().toLowerCase();
 
-            const optedIn = [
-                "yes", "true", "1"
-            ].includes(consent);
+            const optedIn = ["yes", "true", "1"].includes(consent);
 
-            if (!validPhone(phone) || !optedIn || seen.has(phone)) {
+            if (
+                !validPhone(phone) ||
+                !optedIn ||
+                seen.has(phone)
+            ) {
                 skipped++;
                 continue;
             }
@@ -358,7 +591,7 @@ app.post(
 
         if (recipients.length > MAX_RECIPIENTS) {
             return res.status(400).json({
-                error: `Maximum ${MAX_RECIPIENTS} recipients per CSV. Split the list into smaller batches.`,
+                error: `Maximum ${MAX_RECIPIENTS} recipients allowed.`,
                 eligible: recipients.length,
                 skipped
             });
@@ -366,15 +599,18 @@ app.post(
 
         if (!recipients.length) {
             return res.status(400).json({
-                error: "No valid, opted-in, unique recipients found.",
+                error: "No valid opted-in recipients.",
                 skipped
             });
         }
 
         try {
             requireWhatsAppConfig();
+            requireSupabaseConfig();
         } catch (error) {
-            return res.status(500).json({ error: error.message });
+            return res.status(503).json({
+                error: error.message
+            });
         }
 
         const results = [];
@@ -382,14 +618,28 @@ app.post(
         for (let i = 0; i < recipients.length; i++) {
             const recipient = recipients[i];
 
-            // If this process has received a reply from this customer,
-            // do not send an automated follow-up.
-            if (repliedCustomers.has(recipient)) {
+            let lead;
+
+            try {
+                lead = await getLeadFromDatabase(recipient);
+            } catch (error) {
                 results.push({
                     recipient,
                     status: "skipped",
-                    reason: "Customer has replied"
+                    reason: "Database status could not be checked"
                 });
+
+                skipped++;
+                continue;
+            }
+
+            if (lead?.stopped) {
+                results.push({
+                    recipient,
+                    status: "skipped",
+                    reason: "Customer has already replied"
+                });
+
                 skipped++;
                 continue;
             }
@@ -400,7 +650,8 @@ app.post(
                 results.push({
                     recipient,
                     status: "accepted_by_meta",
-                    messageId: response.data?.messages?.[0]?.id || null
+                    messageId:
+                        response.data?.messages?.[0]?.id || null
                 });
             } catch (error) {
                 results.push({
@@ -418,10 +669,11 @@ app.post(
         }
 
         const accepted = results.filter(
-            result => result.status === "accepted_by_meta"
+            item => item.status === "accepted_by_meta"
         ).length;
+
         const failed = results.filter(
-            result => result.status === "failed"
+            item => item.status === "failed"
         ).length;
 
         return res.status(200).json({
@@ -429,27 +681,38 @@ app.post(
             acceptedByMeta: accepted,
             failed,
             skipped,
-            note: "Accepted by Meta does not guarantee delivery. Check message status webhooks for delivery results.",
+            note: "Accepted by Meta does not guarantee delivery.",
             results
         });
     }
 );
 
-// Multer errors and upload errors
+// --------------------------------------------------
+// ERROR HANDLING
+// --------------------------------------------------
+
 app.use((error, req, res, next) => {
     if (error instanceof multer.MulterError) {
         return res.status(400).json({
-            error: "CSV upload failed or file is too large (max 1 MB)."
+            error: "CSV upload failed. Maximum file size is 1 MB."
         });
     }
 
     if (error) {
-        return res.status(400).json({ error: error.message });
+        return res.status(400).json({
+            error: error.message
+        });
     }
 
     next();
 });
 
+// --------------------------------------------------
+// START SERVER
+// --------------------------------------------------
+
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(
+        `Invest N Gain Backend running on port ${PORT}`
+    );
 });
