@@ -21,6 +21,31 @@ const MAX_RECIPIENTS = 100;
 const MESSAGE_DELAY_MS = 1000;
 
 const repliedCustomers = new Map();
+
+function classifyLead(message) {
+    const text = String(
+        message.text?.body ||
+        message.button?.text ||
+        message.interactive?.button_reply?.title ||
+        message.interactive?.list_reply?.title ||
+        ""
+    ).trim().toLowerCase();
+
+    if (/\b(not interested|no thanks|stop|unsubscribe)\b/.test(text)) {
+        return "NOT_INTERESTED";
+    }
+
+    if (/\b(call back|callback|call me|later|tomorrow)\b/.test(text)) {
+        return "CALL_BACK";
+    }
+
+    if (/\b(interested|yes|details|price|site visit)\b/.test(text)) {
+        return "INTERESTED";
+    }
+
+    return "NEEDS_REVIEW";
+}
+
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
@@ -132,17 +157,23 @@ app.post("/webhook", (req, res) => {
                 for (const message of value.messages || []) {
                     const customer = normalizePhone(message.from);
 
-                    if (customer) {
-                        repliedCustomers.set(customer, {
-                            stopped: true,
-                            repliedAt: new Date().toISOString(),
-                            messageType: message.type
-                        });
+                  
+if (customer) {
+    const leadStatus = classifyLead(message);
 
-                        console.log(
-                            "Customer reply recorded; follow-up stopped."
-                        );
-                    }
+    repliedCustomers.set(customer, {
+        stopped: true,
+        repliedAt: new Date().toISOString(),
+        messageType: message.type,
+        leadStatus: leadStatus
+    });
+
+    console.log(
+        "Customer reply recorded. Lead status:",
+        leadStatus
+    );
+}
+
                 }
             }
         }
