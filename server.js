@@ -6,7 +6,9 @@ const crypto = require("crypto");
 const { parse } = require("csv-parse/sync");
 
 const app = express();
+
 const PORT = process.env.PORT || 3000;
+
 const VERIFY_TOKEN =
     process.env.VERIFY_TOKEN || "investngain_webhook_2026";
 
@@ -23,16 +25,24 @@ const ENABLE_BULK_SENDING =
 
 const TEMPLATE_NAME = "property_update_investngain";
 const TEMPLATE_LANGUAGE = "en";
+
 const MAX_RECIPIENTS = 100;
 const MESSAGE_DELAY_MS = 1000;
 
-// Preserve original request body for Meta signature verification.
-app.use(express.json({
-    limit: "1mb",
-    verify: (req, res, buffer) => {
-        req.rawBody = Buffer.from(buffer);
-    }
-}));
+// --------------------------------------------------
+// EXPRESS CONFIGURATION
+// --------------------------------------------------
+
+// Preserve the original request body for Meta signature verification.
+
+app.use(
+    express.json({
+        limit: "1mb",
+        verify: (req, res, buffer) => {
+            req.rawBody = Buffer.from(buffer);
+        }
+    })
+);
 
 // --------------------------------------------------
 // HELPERS
@@ -82,13 +92,17 @@ function requireAdmin(req, res, next) {
 
 function requireWhatsAppConfig() {
     if (!PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
-        throw new Error("WhatsApp credentials are missing in Render.");
+        throw new Error(
+            "WhatsApp credentials are missing in Render."
+        );
     }
 }
 
 function requireSupabaseConfig() {
     if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
-        throw new Error("Supabase environment variables are missing.");
+        throw new Error(
+            "Supabase environment variables are missing."
+        );
     }
 }
 
@@ -99,11 +113,11 @@ function requireSupabaseConfig() {
 function supabaseHeaders(extra = {}) {
     requireSupabaseConfig();
 
-  return {
-  apikey: SUPABASE_SECRET_KEY,
-  "Content-Type": "application/json",
-  ...extra
-};
+    return {
+        apikey: SUPABASE_SECRET_KEY,
+        "Content-Type": "application/json",
+        ...extra
+    };
 }
 
 function supabaseTableUrl() {
@@ -152,7 +166,9 @@ async function getLeadFromDatabase(customer) {
 
     const lead = response.data?.[0];
 
-    if (!lead) return null;
+    if (!lead) {
+        return null;
+    }
 
     return {
         stopped: lead.stop_followup,
@@ -173,17 +189,25 @@ function classifyLead(message) {
         message.interactive?.button_reply?.title ||
         message.interactive?.list_reply?.title ||
         ""
-    ).trim().toLowerCase();
+    )
+        .trim()
+        .toLowerCase();
 
-    if (/\b(not interested|no thanks|stop|unsubscribe)\b/.test(text)) {
+    if (
+        /\b(not interested|no thanks|stop|unsubscribe)\b/.test(text)
+    ) {
         return "NOT_INTERESTED";
     }
 
-    if (/\b(call back|callback|call me|later|tomorrow)\b/.test(text)) {
+    if (
+        /\b(call back|callback|call me|later|tomorrow)\b/.test(text)
+    ) {
         return "CALL_BACK";
     }
 
-    if (/\b(interested|yes|details|price|site visit)\b/.test(text)) {
+    if (
+        /\b(interested|yes|details|price|site visit)\b/.test(text)
+    ) {
         return "INTERESTED";
     }
 
@@ -195,19 +219,34 @@ function classifyLead(message) {
 // --------------------------------------------------
 
 function verifyMetaSignature(req, res, next) {
+    console.log("WEBHOOK RECEIVED");
+
     if (!META_APP_SECRET) {
-        return res.status(503).json({
-            error: "META_APP_SECRET is not configured."
-        });
+        console.log(
+            "WEBHOOK REJECTED: App secret missing"
+        );
+
+        return res.sendStatus(503);
     }
 
     const signature = req.get("x-hub-signature-256");
 
-    if (!signature || !/^sha256=[a-f0-9]{64}$/i.test(signature)) {
+    if (
+        !signature ||
+        !/^sha256=[a-f0-9]{64}$/i.test(signature)
+    ) {
+        console.log(
+            "WEBHOOK REJECTED: Signature missing or invalid format"
+        );
+
         return res.sendStatus(403);
     }
 
     if (!req.rawBody) {
+        console.log(
+            "WEBHOOK REJECTED: Raw body missing"
+        );
+
         return res.sendStatus(403);
     }
 
@@ -218,35 +257,51 @@ function verifyMetaSignature(req, res, next) {
             .update(req.rawBody)
             .digest("hex");
 
-    const suppliedBuffer = Buffer.from(signature.toLowerCase());
+    const suppliedBuffer = Buffer.from(
+        signature.toLowerCase()
+    );
+
     const expectedBuffer = Buffer.from(expected);
 
     if (
         suppliedBuffer.length !== expectedBuffer.length ||
-        !crypto.timingSafeEqual(suppliedBuffer, expectedBuffer)
+        !crypto.timingSafeEqual(
+            suppliedBuffer,
+            expectedBuffer
+        )
     ) {
+        console.log(
+            "WEBHOOK REJECTED: Signature mismatch"
+        );
+
         return res.sendStatus(403);
     }
+
+    console.log("WEBHOOK SIGNATURE VERIFIED");
 
     next();
 }
 
 // --------------------------------------------------
-// CSV UPLOAD
+// CSV UPLOAD CONFIGURATION
 // --------------------------------------------------
 
 const upload = multer({
     storage: multer.memoryStorage(),
+
     limits: {
         fileSize: 1024 * 1024,
         files: 1
     },
+
     fileFilter: (req, file, cb) => {
         if (
             file.mimetype !== "text/csv" &&
             !file.originalname.toLowerCase().endsWith(".csv")
         ) {
-            return cb(new Error("Please upload a CSV file."));
+            return cb(
+                new Error("Please upload a CSV file.")
+            );
         }
 
         cb(null, true);
@@ -254,7 +309,7 @@ const upload = multer({
 });
 
 // --------------------------------------------------
-// WHATSAPP TEMPLATE
+// WHATSAPP TEMPLATE SENDING
 // --------------------------------------------------
 
 async function sendTemplate(recipient) {
@@ -267,8 +322,10 @@ async function sendTemplate(recipient) {
             recipient_type: "individual",
             to: recipient,
             type: "template",
+
             template: {
                 name: TEMPLATE_NAME,
+
                 language: {
                     code: TEMPLATE_LANGUAGE
                 }
@@ -276,20 +333,25 @@ async function sendTemplate(recipient) {
         },
         {
             headers: {
-                Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                Authorization:
+                    `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+
                 "Content-Type": "application/json"
             },
+
             timeout: 20000
         }
     );
 }
 
 // --------------------------------------------------
-// HOME
+// HOME ROUTE
 // --------------------------------------------------
 
 app.get("/", (req, res) => {
-    res.send("Invest N Gain WhatsApp Backend is running!");
+    res.send(
+        "Invest N Gain WhatsApp Backend is running!"
+    );
 });
 
 // --------------------------------------------------
@@ -306,7 +368,10 @@ app.get("/webhook", (req, res) => {
         token === VERIFY_TOKEN &&
         challenge
     ) {
-        console.log("Webhook verified successfully.");
+        console.log(
+            "Webhook verified successfully."
+        );
+
         return res.status(200).send(challenge);
     }
 
@@ -320,35 +385,63 @@ app.get("/webhook", (req, res) => {
 app.post(
     "/webhook",
     verifyMetaSignature,
+
     async (req, res) => {
         try {
-            console.log("WEBHOOK DEBUG:", Object.keys(req.body || {}));
+            console.log(
+                "WEBHOOK DEBUG:",
+                Object.keys(req.body || {})
+            );
 
             const entries = req.body?.entry || [];
+
+            console.log(
+                "WEBHOOK ENTRY COUNT:",
+                entries.length
+            );
 
             for (const entry of entries) {
                 for (const change of entry.changes || []) {
                     const value = change.value || {};
 
-                    for (const message of value.messages || []) {
-                        const customer = normalizePhone(message.from);
+                    const messages = value.messages || [];
 
-                        if (!validPhone(customer)) continue;
+                    console.log(
+                        "WEBHOOK MESSAGE COUNT:",
+                        messages.length
+                    );
+
+                    for (const message of messages) {
+                        const customer = normalizePhone(
+                            message.from
+                        );
+
+                        if (!validPhone(customer)) {
+                            console.log(
+                                "WEBHOOK SKIPPED: Invalid sender format"
+                            );
+
+                            continue;
+                        }
 
                         const leadStatus = classifyLead(message);
 
                         const record = {
                             stopped: true,
-                            repliedAt: new Date().toISOString(),
+                            repliedAt:
+                                new Date().toISOString(),
+
                             messageType: message.type,
                             leadStatus
                         };
 
-                        await saveLeadToDatabase(customer, record);
+                        await saveLeadToDatabase(
+                            customer,
+                            record
+                        );
 
                         console.log(
                             "Customer reply saved in Supabase:",
-                            customer,
                             leadStatus
                         );
                     }
@@ -356,6 +449,7 @@ app.post(
             }
 
             return res.sendStatus(200);
+
         } catch (error) {
             console.error(
                 "Webhook processing error:",
@@ -363,6 +457,8 @@ app.post(
             );
 
             // Do not acknowledge a failed database write.
+            // Meta may retry the webhook.
+
             return res.sendStatus(500);
         }
     }
@@ -375,23 +471,31 @@ app.post(
 app.get(
     "/followup-status",
     requireAdmin,
+
     async (req, res) => {
         try {
-            const recipient = normalizePhone(req.query.recipient);
+            const recipient = normalizePhone(
+                req.query.recipient
+            );
 
             if (!validPhone(recipient)) {
                 return res.status(400).json({
-                    error: "Provide a valid recipient number."
+                    error:
+                        "Provide a valid recipient number."
                 });
             }
 
-            const record = await getLeadFromDatabase(recipient);
+            const record =
+                await getLeadFromDatabase(recipient);
 
             return res.json({
                 recipient,
-                stopFollowUp: Boolean(record?.stopped),
+                stopFollowUp:
+                    Boolean(record?.stopped),
+
                 details: record
             });
+
         } catch (error) {
             console.error(
                 "Follow-up status error:",
@@ -399,7 +503,8 @@ app.get(
             );
 
             return res.status(500).json({
-                error: "Could not retrieve lead status."
+                error:
+                    "Could not retrieve lead status."
             });
         }
     }
@@ -412,14 +517,24 @@ app.get(
 app.post(
     "/send-message",
     requireAdmin,
+
     async (req, res) => {
         try {
-            const recipient = normalizePhone(req.body.recipient);
-            const message = String(req.body.message || "").trim();
+            const recipient = normalizePhone(
+                req.body.recipient
+            );
 
-            if (!validPhone(recipient) || !message) {
+            const message = String(
+                req.body.message || ""
+            ).trim();
+
+            if (
+                !validPhone(recipient) ||
+                !message
+            ) {
                 return res.status(400).json({
-                    error: "Valid recipient and message are required."
+                    error:
+                        "Valid recipient and message are required."
                 });
             }
 
@@ -432,20 +547,28 @@ app.post(
                     recipient_type: "individual",
                     to: recipient,
                     type: "text",
+
                     text: {
                         body: message
                     }
                 },
                 {
                     headers: {
-                        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                        "Content-Type": "application/json"
+                        Authorization:
+                            `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+
+                        "Content-Type":
+                            "application/json"
                     },
+
                     timeout: 20000
                 }
             );
 
-            return res.status(200).json(response.data);
+            return res.status(200).json(
+                response.data
+            );
+
         } catch (error) {
             console.error(
                 "Send message error:",
@@ -453,7 +576,8 @@ app.post(
             );
 
             return res.status(500).json({
-                error: error.response?.data || error.message
+                error:
+                    error.response?.data || error.message
             });
         }
     }
@@ -466,29 +590,41 @@ app.post(
 app.post(
     "/send-template",
     requireAdmin,
+
     async (req, res) => {
         try {
-            const recipient = normalizePhone(req.body.recipient);
+            const recipient = normalizePhone(
+                req.body.recipient
+            );
 
             if (!validPhone(recipient)) {
                 return res.status(400).json({
-                    error: "Valid recipient number required."
+                    error:
+                        "Valid recipient number required."
                 });
             }
 
             // Respect permanent follow-up stop status.
-            const lead = await getLeadFromDatabase(recipient);
+
+            const lead =
+                await getLeadFromDatabase(recipient);
 
             if (lead?.stopped) {
                 return res.status(409).json({
-                    error: "Customer has already replied.",
+                    error:
+                        "Customer has already replied.",
+
                     leadStatus: lead.leadStatus
                 });
             }
 
-            const response = await sendTemplate(recipient);
+            const response =
+                await sendTemplate(recipient);
 
-            return res.status(200).json(response.data);
+            return res.status(200).json(
+                response.data
+            );
+
         } catch (error) {
             console.error(
                 "Send template error:",
@@ -496,7 +632,8 @@ app.post(
             );
 
             return res.status(500).json({
-                error: error.response?.data || error.message
+                error:
+                    error.response?.data || error.message
             });
         }
     }
@@ -510,42 +647,54 @@ app.post(
     "/bulk-template",
     requireAdmin,
     upload.single("file"),
+
     async (req, res) => {
         if (!ENABLE_BULK_SENDING) {
             return res.status(403).json({
-                error: "Bulk sending is disabled in Render."
+                error:
+                    "Bulk sending is disabled in Render."
             });
         }
 
         if (!req.file) {
             return res.status(400).json({
-                error: "Upload CSV in the 'file' field."
+                error:
+                    "Upload CSV in the 'file' field."
             });
         }
 
         let rows;
 
         try {
-            rows = parse(req.file.buffer, {
-                columns: true,
-                skip_empty_lines: true,
-                trim: true,
-                bom: true
-            });
+            rows = parse(
+                req.file.buffer,
+                {
+                    columns: true,
+                    skip_empty_lines: true,
+                    trim: true,
+                    bom: true
+                }
+            );
+
         } catch (error) {
             return res.status(400).json({
-                error: "Invalid CSV format."
+                error:
+                    "Invalid CSV format."
             });
         }
 
         if (!rows.length) {
             return res.status(400).json({
-                error: "CSV has no customer rows."
+                error:
+                    "CSV has no customer rows."
             });
         }
 
-        const headers = Object.keys(rows[0]).map(
-            header => header.trim().toLowerCase()
+        const headers = Object.keys(
+            rows[0]
+        ).map(
+            header =>
+                header.trim().toLowerCase()
         );
 
         if (
@@ -553,28 +702,43 @@ app.post(
             !headers.includes("consent")
         ) {
             return res.status(400).json({
-                error: "CSV must contain phone and consent columns."
+                error:
+                    "CSV must contain phone and consent columns."
             });
         }
 
         const seen = new Set();
         const recipients = [];
+
         let skipped = 0;
 
         for (const row of rows) {
             const normalizedRow = {};
 
-            for (const [key, value] of Object.entries(row)) {
-                normalizedRow[key.trim().toLowerCase()] = value;
+            for (
+                const [key, value]
+                of Object.entries(row)
+            ) {
+                normalizedRow[
+                    key.trim().toLowerCase()
+                ] = value;
             }
 
-            const phone = normalizePhone(normalizedRow.phone);
+            const phone = normalizePhone(
+                normalizedRow.phone
+            );
 
             const consent = String(
                 normalizedRow.consent || ""
-            ).trim().toLowerCase();
+            )
+                .trim()
+                .toLowerCase();
 
-            const optedIn = ["yes", "true", "1"].includes(consent);
+            const optedIn = [
+                "yes",
+                "true",
+                "1"
+            ].includes(consent);
 
             if (
                 !validPhone(phone) ||
@@ -589,9 +753,14 @@ app.post(
             recipients.push(phone);
         }
 
-        if (recipients.length > MAX_RECIPIENTS) {
+        if (
+            recipients.length >
+            MAX_RECIPIENTS
+        ) {
             return res.status(400).json({
-                error: `Maximum ${MAX_RECIPIENTS} recipients allowed.`,
+                error:
+                    `Maximum ${MAX_RECIPIENTS} recipients allowed.`,
+
                 eligible: recipients.length,
                 skipped
             });
@@ -599,7 +768,9 @@ app.post(
 
         if (!recipients.length) {
             return res.status(400).json({
-                error: "No valid opted-in recipients.",
+                error:
+                    "No valid opted-in recipients.",
+
                 skipped
             });
         }
@@ -607,6 +778,7 @@ app.post(
         try {
             requireWhatsAppConfig();
             requireSupabaseConfig();
+
         } catch (error) {
             return res.status(503).json({
                 error: error.message
@@ -615,18 +787,28 @@ app.post(
 
         const results = [];
 
-        for (let i = 0; i < recipients.length; i++) {
+        for (
+            let i = 0;
+            i < recipients.length;
+            i++
+        ) {
             const recipient = recipients[i];
 
             let lead;
 
             try {
-                lead = await getLeadFromDatabase(recipient);
+                lead =
+                    await getLeadFromDatabase(
+                        recipient
+                    );
+
             } catch (error) {
                 results.push({
                     recipient,
                     status: "skipped",
-                    reason: "Database status could not be checked"
+
+                    reason:
+                        "Database status could not be checked"
                 });
 
                 skipped++;
@@ -637,7 +819,9 @@ app.post(
                 results.push({
                     recipient,
                     status: "skipped",
-                    reason: "Customer has already replied"
+
+                    reason:
+                        "Customer has already replied"
                 });
 
                 skipped++;
@@ -645,43 +829,65 @@ app.post(
             }
 
             try {
-                const response = await sendTemplate(recipient);
+                const response =
+                    await sendTemplate(recipient);
 
                 results.push({
                     recipient,
-                    status: "accepted_by_meta",
+                    status:
+                        "accepted_by_meta",
+
                     messageId:
-                        response.data?.messages?.[0]?.id || null
+                        response.data?.messages?.[0]?.id ||
+                        null
                 });
+
             } catch (error) {
                 results.push({
                     recipient,
                     status: "failed",
+
                     error:
                         error.response?.data?.error?.message ||
                         error.message
                 });
             }
 
-            if (i < recipients.length - 1) {
-                await delay(MESSAGE_DELAY_MS);
+            if (
+                i <
+                recipients.length - 1
+            ) {
+                await delay(
+                    MESSAGE_DELAY_MS
+                );
             }
         }
 
         const accepted = results.filter(
-            item => item.status === "accepted_by_meta"
+            item =>
+                item.status ===
+                "accepted_by_meta"
         ).length;
 
         const failed = results.filter(
-            item => item.status === "failed"
+            item =>
+                item.status ===
+                "failed"
         ).length;
 
         return res.status(200).json({
-            totalProcessed: results.length,
-            acceptedByMeta: accepted,
+            totalProcessed:
+                results.length,
+
+            acceptedByMeta:
+                accepted,
+
             failed,
             skipped,
-            note: "Accepted by Meta does not guarantee delivery.",
+
+            note:
+                "Accepted by Meta does not guarantee delivery.",
+
             results
         });
     }
@@ -692,9 +898,13 @@ app.post(
 // --------------------------------------------------
 
 app.use((error, req, res, next) => {
-    if (error instanceof multer.MulterError) {
+    if (
+        error instanceof
+        multer.MulterError
+    ) {
         return res.status(400).json({
-            error: "CSV upload failed. Maximum file size is 1 MB."
+            error:
+                "CSV upload failed. Maximum file size is 1 MB."
         });
     }
 
