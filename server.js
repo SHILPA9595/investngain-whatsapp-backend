@@ -99,12 +99,11 @@ function requireSupabaseConfig() {
 function supabaseHeaders(extra = {}) {
     requireSupabaseConfig();
 
-    return {
-        apikey: SUPABASE_SECRET_KEY,
-        Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
-        "Content-Type": "application/json",
-        ...extra
-    };
+  return {
+  apikey: SUPABASE_SECRET_KEY,
+  "Content-Type": "application/json",
+  ...extra
+};
 }
 
 function supabaseTableUrl() {
