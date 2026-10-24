@@ -23,7 +23,7 @@ const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 const ENABLE_BULK_SENDING =
     process.env.ENABLE_BULK_SENDING === "true";
 
-const TEMPLATE_NAME = "property_update_investngain";
+const TEMPLATE_NAME = "by_harsh_2";
 const TEMPLATE_LANGUAGE = "en";
 
 const MAX_RECIPIENTS = 100;
