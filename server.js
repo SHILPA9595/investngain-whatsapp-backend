@@ -893,6 +893,110 @@ app.post(
     }
 );
 
+ // --------------------------------------------------
+ // IMPORT LEADS FROM CSV
+ // --------------------------------------------------
+
+app.post(
+    "/import-leads",
+    requireAdmin,
+    upload.single("file"),
+    async (req, res) => {
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    error: "Please upload a CSV file."
+                });
+            }
+
+            const rows = parse(req.file.buffer, {
+                columns: header => header.map(
+                    value => value.trim().toLowerCase()
+                ),
+                skip_empty_lines: true,
+                trim: true,
+                bom: true
+            });
+
+            if (rows.length > 100) {
+                return res.status(400).json({
+                    error: "Maximum 100 rows per upload."
+                });
+            }
+
+            const seen = new Set();
+            let imported = 0;
+            let skipped = 0;
+
+            for (const row of rows) {
+                const phone = normalizePhone(row.phone);
+
+                const consent = String(
+                    row.consent || ""
+                ).trim().toLowerCase();
+
+                const optedIn = [
+                    "yes", "true", "1"
+                ].includes(consent);
+
+                if (
+                    !validPhone(phone) ||
+                    !optedIn ||
+                    seen.has(phone)
+                ) {
+                    skipped++;
+                    continue;
+                }
+
+                seen.add(phone);
+
+                // Never overwrite an existing customer record.
+                const response = await axios.post(
+                    `${supabaseTableUrl()}?on_conflict=phone`,
+                    {
+                        phone,
+                        lead_source: "CSV",
+                        whatsapp_opt_in: true,
+                        consent_recorded_at:
+                            new Date().toISOString(),
+                        stop_followup: false,
+                        lead_status: "NEW"
+                    },
+                    {
+                        headers: supabaseHeaders({
+                            Prefer:
+                                "resolution=ignore-duplicates,return=representation"
+                        }),
+                        timeout: 10000
+                    }
+                );
+
+                if (response.data?.length) {
+                    imported++;
+                } else {
+                    skipped++;
+                }
+            }
+
+            return res.json({
+                imported,
+                skipped,
+                message: "Lead import completed."
+            });
+
+        } catch (error) {
+            console.error(
+                "Import error:",
+                error.response?.data || error.message
+            );
+
+            return res.status(500).json({
+                error: "Lead import failed."
+            });
+        }
+    }
+);
+
 // --------------------------------------------------
 // ERROR HANDLING
 // --------------------------------------------------
