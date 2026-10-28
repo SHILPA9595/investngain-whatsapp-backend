@@ -1005,11 +1005,25 @@ app.post(
 const ENABLE_AUTO_FOLLOWUP =
     process.env.ENABLE_AUTO_FOLLOWUP === "true";
 
+
 const FOLLOWUP_SCHEDULE = [
-    { day: 1, afterHours: 24 },
-    { day: 3, afterHours: 72 },
-    { day: 7, afterHours: 168 }
+    {
+        day: 1,
+        afterHours: 24,
+        template: "new_utility_temp"
+    },
+    {
+        day: 3,
+        afterHours: 72,
+        template: "utility_by_harsh"
+    },
+    {
+        day: 7,
+        afterHours: 168,
+        template: "by_harsh_2"
+    }
 ];
+
 
 async function getPendingFollowups() {
     const response = await axios.get(supabaseTableUrl(), {
@@ -1049,6 +1063,7 @@ async function getPendingFollowups() {
                     id: lead.id,
                     phone: lead.phone,
                     day: item.day,
+                    template: item.template,
                     dueAt: new Date(dueAt).toISOString()
                 });
 
