@@ -998,6 +998,94 @@ app.post(
 );
 
 // --------------------------------------------------
+// AUTOMATIC FOLLOW-UP CONFIGURATION
+// --------------------------------------------------
+
+// Keep automatic WhatsApp sending disabled during testing.
+const ENABLE_AUTO_FOLLOWUP =
+    process.env.ENABLE_AUTO_FOLLOWUP === "true";
+
+const FOLLOWUP_SCHEDULE = [
+    { day: 1, afterHours: 24 },
+    { day: 3, afterHours: 72 },
+    { day: 7, afterHours: 168 }
+];
+
+async function getPendingFollowups() {
+    const response = await axios.get(supabaseTableUrl(), {
+        params: {
+            select: [
+                "id",
+                "phone",
+                "followup_started_at",
+                "followup_day1_sent_at",
+                "followup_day3_sent_at",
+                "followup_day7_sent_at"
+            ].join(","),
+            whatsapp_opt_in: "eq.true",
+            stop_followup: "eq.false",
+            followup_started_at: "not.is.null",
+            order: "followup_started_at.asc",
+            limit: 100
+        },
+        headers: supabaseHeaders(),
+        timeout: 10000
+    });
+
+    const now = Date.now();
+    const pending = [];
+
+    for (const lead of response.data || []) {
+        const started = Date.parse(lead.followup_started_at);
+
+        if (!Number.isFinite(started)) continue;
+
+        for (const item of FOLLOWUP_SCHEDULE) {
+            const column = `followup_day${item.day}_sent_at`;
+            const dueAt = started + item.afterHours * 60 * 60 * 1000;
+
+            if (!lead[column] && now >= dueAt) {
+                pending.push({
+                    id: lead.id,
+                    phone: lead.phone,
+                    day: item.day,
+                    dueAt: new Date(dueAt).toISOString()
+                });
+
+                break;
+            }
+        }
+    }
+
+    return pending;
+}
+
+app.get(
+    "/pending-followups",
+    requireAdmin,
+    async (req, res) => {
+        try {
+            const pending = await getPendingFollowups();
+
+            return res.json({
+                autoSendingEnabled: ENABLE_AUTO_FOLLOWUP,
+                pendingCount: pending.length,
+                pending
+            });
+        } catch (error) {
+            console.error(
+                "Pending follow-up error:",
+                error.response?.data || error.message
+            );
+
+            return res.status(500).json({
+                error: "Could not check pending follow-ups."
+            });
+        }
+    }
+);
+
+// --------------------------------------------------
 // ERROR HANDLING
 // --------------------------------------------------
 
