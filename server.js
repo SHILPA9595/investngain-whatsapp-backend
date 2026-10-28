@@ -27,6 +27,7 @@ const ENABLE_BULK_SENDING =
 const TEMPLATE_NAME = "hello_world";
 const TEMPLATE_LANGUAGE = "en_US";
 
+
 const MAX_RECIPIENTS = 100;
 const MESSAGE_DELAY_MS = 1000;
 
