@@ -320,6 +320,7 @@ async function sendTemplate(recipient, templateName = TEMPLATE_NAME, customerNam
 
 const allowedTemplates = [
     "hello_world",
+    "lead_followup_test",
     "new_utility_temp",
     "utility_by_harsh",
     "by_harsh_2"
