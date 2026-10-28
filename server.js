@@ -23,9 +23,8 @@ const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 const ENABLE_BULK_SENDING =
     process.env.ENABLE_BULK_SENDING === "true";
 
-
-const TEMPLATE_NAME = "hello_world";
-const TEMPLATE_LANGUAGE = "en_US";
+const TEMPLATE_NAME = "lead_followup_test";
+const TEMPLATE_LANGUAGE = "en";
 
 
 const MAX_RECIPIENTS = 100;
