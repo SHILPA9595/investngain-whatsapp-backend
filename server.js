@@ -312,8 +312,41 @@ const upload = multer({
 // WHATSAPP TEMPLATE SENDING
 // --------------------------------------------------
 
-async function sendTemplate(recipient) {
+
+async function sendTemplate(recipient, templateName = TEMPLATE_NAME, customerName = "Customer") {
     requireWhatsAppConfig();
+
+    const allowedTemplates = [
+        "new_utility_temp",
+        "utility_by_harsh",
+        "by_harsh_2"
+    ];
+
+    if (!allowedTemplates.includes(templateName)) {
+        throw new Error("Template is not allowed.");
+    }
+
+    const template = {
+        name: templateName,
+        language: {
+            code: TEMPLATE_LANGUAGE
+        }
+    };
+
+    // by_harsh_2 requires one body variable: {{1}}
+    if (templateName === "by_harsh_2") {
+        template.components = [
+            {
+                type: "body",
+                parameters: [
+                    {
+                        type: "text",
+                        text: String(customerName || "Customer")
+                    }
+                ]
+            }
+        ];
+    }
 
     return axios.post(
         `https://graph.facebook.com/v26.0/${PHONE_NUMBER_ID}/messages`,
@@ -322,23 +355,13 @@ async function sendTemplate(recipient) {
             recipient_type: "individual",
             to: recipient,
             type: "template",
-
-            template: {
-                name: TEMPLATE_NAME,
-
-                language: {
-                    code: TEMPLATE_LANGUAGE
-                }
-            }
+            template
         },
         {
             headers: {
-                Authorization:
-                    `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-
+                Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
                 "Content-Type": "application/json"
             },
-
             timeout: 20000
         }
     );
