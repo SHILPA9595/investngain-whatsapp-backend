@@ -23,8 +23,9 @@ const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 const ENABLE_BULK_SENDING =
     process.env.ENABLE_BULK_SENDING === "true";
 
-const TEMPLATE_NAME = "by_harsh_2";
-const TEMPLATE_LANGUAGE = "en";
+
+const TEMPLATE_NAME = "hello_world";
+const TEMPLATE_LANGUAGE = "en_US";
 
 const MAX_RECIPIENTS = 100;
 const MESSAGE_DELAY_MS = 1000;
