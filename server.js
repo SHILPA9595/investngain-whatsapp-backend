@@ -316,12 +316,14 @@ const upload = multer({
 
 async function sendTemplate(recipient, templateName = TEMPLATE_NAME, customerName = "Customer") {
     requireWhatsAppConfig();
+    
 
-    const allowedTemplates = [
-        "new_utility_temp",
-        "utility_by_harsh",
-        "by_harsh_2"
-    ];
+const allowedTemplates = [
+    "hello_world",
+    "new_utility_temp",
+    "utility_by_harsh",
+    "by_harsh_2"
+];
 
     if (!allowedTemplates.includes(templateName)) {
         throw new Error("Template is not allowed.");
