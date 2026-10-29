@@ -23,7 +23,8 @@ const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 const ENABLE_BULK_SENDING =
     process.env.ENABLE_BULK_SENDING === "true";
 
-const TEMPLATE_NAME = "lead_followup_test";
+
+const TEMPLATE_NAME = "property_update_investngain";
 const TEMPLATE_LANGUAGE = "en";
 
 
@@ -320,6 +321,7 @@ async function sendTemplate(recipient, templateName = TEMPLATE_NAME, customerNam
 
 const allowedTemplates = [
     "hello_world",
+    "property_update_investngain",
     "lead_followup_test",
     "new_utility_temp",
     "utility_by_harsh",
