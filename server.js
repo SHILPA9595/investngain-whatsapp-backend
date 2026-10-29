@@ -320,6 +320,10 @@ async function sendTemplate(recipient, templateName = TEMPLATE_NAME, customerNam
     
 
 const allowedTemplates = [
+    
+"investngain_day1_followup",
+"investngain_day3_followup",
+"investngain_day7_followup",
     "hello_world",
     "property_update_investngain",
     "lead_followup_test",
@@ -1033,24 +1037,11 @@ app.post(
 // Keep automatic WhatsApp sending disabled during testing.
 const ENABLE_AUTO_FOLLOWUP =
     process.env.ENABLE_AUTO_FOLLOWUP === "true";
-
-
+  
 const FOLLOWUP_SCHEDULE = [
-    {
-        day: 1,
-        afterHours: 24,
-        template: "new_utility_temp"
-    },
-    {
-        day: 3,
-        afterHours: 72,
-        template: "utility_by_harsh"
-    },
-    {
-        day: 7,
-        afterHours: 168,
-        template: "by_harsh_2"
-    }
+  { day: 1, afterHours: 24, template: "investngain_day1_followup" },
+  { day: 3, afterHours: 72, template: "investngain_day3_followup" },
+  { day: 7, afterHours: 168, template: "investngain_day7_followup" }
 ];
 
 
