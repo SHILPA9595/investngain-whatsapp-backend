@@ -23,17 +23,37 @@ const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 const ENABLE_BULK_SENDING =
     process.env.ENABLE_BULK_SENDING === "true";
 
+const ENABLE_AUTO_FOLLOWUP =
+    process.env.ENABLE_AUTO_FOLLOWUP === "true";
+
 const TEMPLATE_NAME = "property_update_investngain";
 const TEMPLATE_LANGUAGE = "en";
 
 const MAX_RECIPIENTS = 100;
 const MESSAGE_DELAY_MS = 1000;
+const FOLLOWUP_BATCH_LIMIT = 10;
+
+const FOLLOWUP_SCHEDULE = [
+    {
+        day: 1,
+        afterHours: 24,
+        template: "investngain_day1_followup"
+    },
+    {
+        day: 3,
+        afterHours: 72,
+        template: "investngain_day3_followup"
+    },
+    {
+        day: 7,
+        afterHours: 168,
+        template: "_investngain_day7_followup"
+    }
+];
 
 // --------------------------------------------------
 // EXPRESS CONFIGURATION
 // --------------------------------------------------
-
-// Preserve the original request body for Meta signature verification.
 
 app.use(
     express.json({
@@ -126,6 +146,15 @@ function supabaseTableUrl() {
     return (
         SUPABASE_URL.replace(/\/$/, "") +
         "/rest/v1/whatsapp_leads"
+    );
+}
+
+function jobsTableUrl() {
+    requireSupabaseConfig();
+
+    return (
+        SUPABASE_URL.replace(/\/$/, "") +
+        "/rest/v1/whatsapp_followup_jobs"
     );
 }
 
@@ -222,10 +251,7 @@ function verifyMetaSignature(req, res, next) {
     console.log("WEBHOOK RECEIVED");
 
     if (!META_APP_SECRET) {
-        console.log(
-            "WEBHOOK REJECTED: App secret missing"
-        );
-
+        console.log("WEBHOOK REJECTED: App secret missing");
         return res.sendStatus(503);
     }
 
@@ -233,18 +259,11 @@ function verifyMetaSignature(req, res, next) {
 
     if (
         !signature ||
-        !/^sha256=[a-f0-9]{64}$/i.test(signature)
+        !/^sha256=[a-f0-9]{64}$/i.test(signature) ||
+        !req.rawBody
     ) {
         console.log(
-            "WEBHOOK REJECTED: Signature missing or invalid format"
-        );
-
-        return res.sendStatus(403);
-    }
-
-    if (!req.rawBody) {
-        console.log(
-            "WEBHOOK REJECTED: Raw body missing"
+            "WEBHOOK REJECTED: Missing or malformed signature/body"
         );
 
         return res.sendStatus(403);
@@ -270,10 +289,7 @@ function verifyMetaSignature(req, res, next) {
             expectedBuffer
         )
     ) {
-        console.log(
-            "WEBHOOK REJECTED: Signature mismatch"
-        );
-
+        console.log("WEBHOOK REJECTED: Signature mismatch");
         return res.sendStatus(403);
     }
 
@@ -310,6 +326,8 @@ const upload = multer({
 
 // --------------------------------------------------
 // WHATSAPP TEMPLATE SENDING
+// Manual helper only.
+// Controlled job-claim route never calls this.
 // --------------------------------------------------
 
 async function sendTemplate(
@@ -320,10 +338,10 @@ async function sendTemplate(
     requireWhatsAppConfig();
 
     const allowedTemplates = [
-      "investngain_day1_followup",
-      "investngain_day3_followup",
-      "_investngain_day7_followup",
-"hello_world",
+        "investngain_day1_followup",
+        "investngain_day3_followup",
+        "_investngain_day7_followup",
+        "hello_world",
         "property_update_investngain",
         "lead_followup_test",
         "new_utility_temp",
@@ -341,8 +359,6 @@ async function sendTemplate(
             code: TEMPLATE_LANGUAGE
         }
     };
-
-    // by_harsh_2 requires one body variable.
 
     if (templateName === "by_harsh_2") {
         template.components = [
@@ -401,9 +417,7 @@ app.get("/webhook", (req, res) => {
         token === VERIFY_TOKEN &&
         challenge
     ) {
-        console.log(
-            "Webhook verified successfully."
-        );
+        console.log("Webhook verified successfully.");
 
         return res.status(200).send(challenge);
     }
@@ -435,9 +449,8 @@ app.post(
 
             for (const entry of entries) {
                 for (const change of entry.changes || []) {
-                    const value = change.value || {};
-
-                    const messages = value.messages || [];
+                    const messages =
+                        change.value?.messages || [];
 
                     console.log(
                         "WEBHOOK MESSAGE COUNT:",
@@ -459,18 +472,15 @@ app.post(
 
                         const leadStatus = classifyLead(message);
 
-                        const record = {
-                            stopped: true,
-                            repliedAt:
-                                new Date().toISOString(),
-
-                            messageType: message.type,
-                            leadStatus
-                        };
-
                         await saveLeadToDatabase(
                             customer,
-                            record
+                            {
+                                stopped: true,
+                                repliedAt:
+                                    new Date().toISOString(),
+                                messageType: message.type,
+                                leadStatus
+                            }
                         );
 
                         console.log(
@@ -488,9 +498,6 @@ app.post(
                 "Webhook processing error:",
                 error.response?.data || error.message
             );
-
-            // Do not acknowledge a failed database write.
-            // Meta may retry the webhook.
 
             return res.sendStatus(500);
         }
@@ -513,8 +520,7 @@ app.get(
 
             if (!validPhone(recipient)) {
                 return res.status(400).json({
-                    error:
-                        "Provide a valid recipient number."
+                    error: "Provide a valid recipient number."
                 });
             }
 
@@ -523,9 +529,7 @@ app.get(
 
             return res.json({
                 recipient,
-                stopFollowUp:
-                    Boolean(record?.stopped),
-
+                stopFollowUp: Boolean(record?.stopped),
                 details: record
             });
 
@@ -536,8 +540,7 @@ app.get(
             );
 
             return res.status(500).json({
-                error:
-                    "Could not retrieve lead status."
+                error: "Could not retrieve lead status."
             });
         }
     }
@@ -545,6 +548,7 @@ app.get(
 
 // --------------------------------------------------
 // SEND NORMAL MESSAGE
+// Manual admin endpoint
 // --------------------------------------------------
 
 app.post(
@@ -554,17 +558,14 @@ app.post(
     async (req, res) => {
         try {
             const recipient = normalizePhone(
-                req.body.recipient
+                req.body?.recipient
             );
 
             const message = String(
-                req.body.message || ""
+                req.body?.message || ""
             ).trim();
 
-            if (
-                !validPhone(recipient) ||
-                !message
-            ) {
+            if (!validPhone(recipient) || !message) {
                 return res.status(400).json({
                     error:
                         "Valid recipient and message are required."
@@ -580,7 +581,6 @@ app.post(
                     recipient_type: "individual",
                     to: recipient,
                     type: "text",
-
                     text: {
                         body: message
                     }
@@ -589,18 +589,13 @@ app.post(
                     headers: {
                         Authorization:
                             `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-
-                        "Content-Type":
-                            "application/json"
+                        "Content-Type": "application/json"
                     },
-
                     timeout: 20000
                 }
             );
 
-            return res.status(200).json(
-                response.data
-            );
+            return res.status(200).json(response.data);
 
         } catch (error) {
             console.error(
@@ -609,8 +604,7 @@ app.post(
             );
 
             return res.status(500).json({
-                error:
-                    error.response?.data || error.message
+                error: error.response?.data || error.message
             });
         }
     }
@@ -618,6 +612,7 @@ app.post(
 
 // --------------------------------------------------
 // SEND ONE TEMPLATE
+// Manual admin endpoint
 // --------------------------------------------------
 
 app.post(
@@ -627,36 +622,28 @@ app.post(
     async (req, res) => {
         try {
             const recipient = normalizePhone(
-                req.body.recipient
+                req.body?.recipient
             );
 
             if (!validPhone(recipient)) {
                 return res.status(400).json({
-                    error:
-                        "Valid recipient number required."
+                    error: "Valid recipient number required."
                 });
             }
-
-            // Respect permanent follow-up stop status.
 
             const lead =
                 await getLeadFromDatabase(recipient);
 
             if (lead?.stopped) {
                 return res.status(409).json({
-                    error:
-                        "Customer has already replied.",
-
+                    error: "Customer has already replied.",
                     leadStatus: lead.leadStatus
                 });
             }
 
-            const response =
-                await sendTemplate(recipient);
+            const response = await sendTemplate(recipient);
 
-            return res.status(200).json(
-                response.data
-            );
+            return res.status(200).json(response.data);
 
         } catch (error) {
             console.error(
@@ -665,8 +652,7 @@ app.post(
             );
 
             return res.status(500).json({
-                error:
-                    error.response?.data || error.message
+                error: error.response?.data || error.message
             });
         }
     }
@@ -684,50 +670,40 @@ app.post(
     async (req, res) => {
         if (!ENABLE_BULK_SENDING) {
             return res.status(403).json({
-                error:
-                    "Bulk sending is disabled in Render."
+                error: "Bulk sending is disabled in Render."
             });
         }
 
         if (!req.file) {
             return res.status(400).json({
-                error:
-                    "Upload CSV in the 'file' field."
+                error: "Upload CSV in the 'file' field."
             });
         }
 
         let rows;
 
         try {
-            rows = parse(
-                req.file.buffer,
-                {
-                    columns: true,
-                    skip_empty_lines: true,
-                    trim: true,
-                    bom: true
-                }
-            );
+            rows = parse(req.file.buffer, {
+                columns: true,
+                skip_empty_lines: true,
+                trim: true,
+                bom: true
+            });
 
         } catch (error) {
             return res.status(400).json({
-                error:
-                    "Invalid CSV format."
+                error: "Invalid CSV format."
             });
         }
 
         if (!rows.length) {
             return res.status(400).json({
-                error:
-                    "CSV has no customer rows."
+                error: "CSV has no customer rows."
             });
         }
 
-        const headers = Object.keys(
-            rows[0]
-        ).map(
-            header =>
-                header.trim().toLowerCase()
+        const headers = Object.keys(rows[0]).map(
+            header => header.trim().toLowerCase()
         );
 
         if (
@@ -748,10 +724,7 @@ app.post(
         for (const row of rows) {
             const normalizedRow = {};
 
-            for (
-                const [key, value]
-                of Object.entries(row)
-            ) {
+            for (const [key, value] of Object.entries(row)) {
                 normalizedRow[
                     key.trim().toLowerCase()
                 ] = value;
@@ -763,9 +736,7 @@ app.post(
 
             const consent = String(
                 normalizedRow.consent || ""
-            )
-                .trim()
-                .toLowerCase();
+            ).trim().toLowerCase();
 
             const optedIn = [
                 "yes",
@@ -786,14 +757,10 @@ app.post(
             recipients.push(phone);
         }
 
-        if (
-            recipients.length >
-            MAX_RECIPIENTS
-        ) {
+        if (recipients.length > MAX_RECIPIENTS) {
             return res.status(400).json({
                 error:
                     `Maximum ${MAX_RECIPIENTS} recipients allowed.`,
-
                 eligible: recipients.length,
                 skipped
             });
@@ -801,9 +768,7 @@ app.post(
 
         if (!recipients.length) {
             return res.status(400).json({
-                error:
-                    "No valid opted-in recipients.",
-
+                error: "No valid opted-in recipients.",
                 skipped
             });
         }
@@ -820,26 +785,19 @@ app.post(
 
         const results = [];
 
-        for (
-            let i = 0;
-            i < recipients.length;
-            i++
-        ) {
+        for (let i = 0; i < recipients.length; i++) {
             const recipient = recipients[i];
 
             let lead;
 
             try {
                 lead =
-                    await getLeadFromDatabase(
-                        recipient
-                    );
+                    await getLeadFromDatabase(recipient);
 
             } catch (error) {
                 results.push({
                     recipient,
                     status: "skipped",
-
                     reason:
                         "Database status could not be checked"
                 });
@@ -852,9 +810,7 @@ app.post(
                 results.push({
                     recipient,
                     status: "skipped",
-
-                    reason:
-                        "Customer has already replied"
+                    reason: "Customer has already replied"
                 });
 
                 skipped++;
@@ -867,60 +823,37 @@ app.post(
 
                 results.push({
                     recipient,
-                    status:
-                        "accepted_by_meta",
-
+                    status: "accepted_by_meta",
                     messageId:
-                        response.data?.messages?.[0]?.id ||
-                        null
+                        response.data?.messages?.[0]?.id || null
                 });
 
             } catch (error) {
                 results.push({
                     recipient,
                     status: "failed",
-
                     error:
                         error.response?.data?.error?.message ||
                         error.message
                 });
             }
 
-            if (
-                i <
-                recipients.length - 1
-            ) {
-                await delay(
-                    MESSAGE_DELAY_MS
-                );
+            if (i < recipients.length - 1) {
+                await delay(MESSAGE_DELAY_MS);
             }
         }
 
-        const accepted = results.filter(
-            item =>
-                item.status ===
-                "accepted_by_meta"
-        ).length;
-
-        const failed = results.filter(
-            item =>
-                item.status ===
-                "failed"
-        ).length;
-
         return res.status(200).json({
-            totalProcessed:
-                results.length,
-
-            acceptedByMeta:
-                accepted,
-
-            failed,
+            totalProcessed: results.length,
+            acceptedByMeta: results.filter(
+                item => item.status === "accepted_by_meta"
+            ).length,
+            failed: results.filter(
+                item => item.status === "failed"
+            ).length,
             skipped,
-
             note:
                 "Accepted by Meta does not guarantee delivery.",
-
             results
         });
     }
@@ -934,6 +867,7 @@ app.post(
     "/import-leads",
     requireAdmin,
     upload.single("file"),
+
     async (req, res) => {
         try {
             if (!req.file) {
@@ -958,6 +892,7 @@ app.post(
             }
 
             const seen = new Set();
+
             let imported = 0;
             let skipped = 0;
 
@@ -969,7 +904,9 @@ app.post(
                 ).trim().toLowerCase();
 
                 const optedIn = [
-                    "yes", "true", "1"
+                    "yes",
+                    "true",
+                    "1"
                 ].includes(consent);
 
                 if (
@@ -983,7 +920,6 @@ app.post(
 
                 seen.add(phone);
 
-                // Never overwrite an existing customer record.
                 const response = await axios.post(
                     `${supabaseTableUrl()}?on_conflict=phone`,
                     {
@@ -1031,73 +967,49 @@ app.post(
 );
 
 // --------------------------------------------------
-// AUTOMATIC FOLLOW-UP CONFIGURATION
-// --------------------------------------------------
-
-// Keep automatic WhatsApp sending disabled during testing.
-
-const ENABLE_AUTO_FOLLOWUP =
-    process.env.ENABLE_AUTO_FOLLOWUP === "true";
-
-// Maximum number of jobs registered per request.
-const FOLLOWUP_BATCH_LIMIT = 10;
-
-
-const FOLLOWUP_SCHEDULE = [
-    {
-        day: 1,
-        afterHours: 24,
-        template: "investngain_day1_followup"
-    },
-    {
-        day: 3,
-        afterHours: 72,
-        template: "investngain_day3_followup"
-    },
-    {
-        day: 7,
-        afterHours: 168,
-        template: "_investngain_day7_followup"
-    }
-];
-
-// --------------------------------------------------
 // CHECK PENDING FOLLOW-UPS
+// Registration only. No automatic sending scheduler.
 // --------------------------------------------------
 
 async function getPendingFollowups() {
-    const response = await axios.get(supabaseTableUrl(), {
-        params: {
-            select: [
-                "id",
-                "phone",
-                "followup_started_at",
-                "followup_day1_sent_at",
-                "followup_day3_sent_at",
-                "followup_day7_sent_at"
-            ].join(","),
-            whatsapp_opt_in: "eq.true",
-            stop_followup: "eq.false",
-            followup_started_at: "not.is.null",
-            order: "followup_started_at.asc",
-            limit: 100
-        },
-        headers: supabaseHeaders(),
-        timeout: 10000
-    });
+    const response = await axios.get(
+        supabaseTableUrl(),
+        {
+            params: {
+                select: [
+                    "id",
+                    "phone",
+                    "followup_started_at",
+                    "followup_day1_sent_at",
+                    "followup_day3_sent_at",
+                    "followup_day7_sent_at"
+                ].join(","),
+                whatsapp_opt_in: "eq.true",
+                stop_followup: "eq.false",
+                followup_started_at: "not.is.null",
+                order: "followup_started_at.asc",
+                limit: 100
+            },
+            headers: supabaseHeaders(),
+            timeout: 10000
+        }
+    );
 
     const now = Date.now();
     const pending = [];
 
     for (const lead of response.data || []) {
-        const started = Date.parse(lead.followup_started_at);
+        const started = Date.parse(
+            lead.followup_started_at
+        );
 
         if (!Number.isFinite(started)) {
             continue;
         }
 
         for (const item of FOLLOWUP_SCHEDULE) {
-            const column = `followup_day${item.day}_sent_at`;
+            const column =
+                `followup_day${item.day}_sent_at`;
 
             const dueAt =
                 started + item.afterHours * 60 * 60 * 1000;
@@ -1121,8 +1033,7 @@ async function getPendingFollowups() {
 
 // --------------------------------------------------
 // REGISTER PENDING FOLLOW-UP JOBS
-// This saves jobs in Supabase only.
-// No WhatsApp messages are sent here.
+// Database registration only. No messages sent.
 // --------------------------------------------------
 
 async function registerPendingFollowupJobs() {
@@ -1146,8 +1057,7 @@ async function registerPendingFollowupJobs() {
     }
 
     const response = await axios.post(
-        SUPABASE_URL.replace(/\/$/, "") +
-            "/rest/v1/whatsapp_followup_jobs" +
+        jobsTableUrl() +
             "?on_conflict=lead_id,followup_day",
         jobs,
         {
@@ -1169,7 +1079,6 @@ async function registerPendingFollowupJobs() {
 
 // --------------------------------------------------
 // REGISTER FOLLOW-UP JOBS API
-// Admin-protected POST endpoint.
 // --------------------------------------------------
 
 app.post(
@@ -1199,7 +1108,7 @@ app.post(
 
 // --------------------------------------------------
 // PENDING FOLLOW-UP API
-// Read-only endpoint.
+// Read-only endpoint
 // --------------------------------------------------
 
 app.get(
@@ -1208,7 +1117,8 @@ app.get(
 
     async (req, res) => {
         try {
-            const pending = await getPendingFollowups();
+            const pending =
+                await getPendingFollowups();
 
             return res.json({
                 autoSendingEnabled: ENABLE_AUTO_FOLLOWUP,
@@ -1230,14 +1140,15 @@ app.get(
     }
 );
 
-//
+// --------------------------------------------------
 // SAFE FOLLOW-UP JOB PREVIEW
 // Read-only: does not claim or send anything.
-//
+// --------------------------------------------------
 
 app.get(
     "/preview-followup-job/:id",
     requireAdmin,
+
     async (req, res) => {
         try {
             const jobId = Number(req.params.id);
@@ -1251,27 +1162,26 @@ app.get(
                 });
             }
 
-            const url =
-                SUPABASE_URL.replace(/\/$/, "") +
-                "/rest/v1/whatsapp_followup_jobs";
-
-            const response = await axios.get(url, {
-                params: {
-                    id: `eq.${jobId}`,
-                    select: [
-                        "id",
-                        "lead_id",
-                        "followup_day",
-                        "template_name",
-                        "status",
-                        "attempt_count",
-                        "claimed_at"
-                    ].join(","),
-                    limit: 1
-                },
-                headers: supabaseHeaders(),
-                timeout: 10000
-            });
+            const response = await axios.get(
+                jobsTableUrl(),
+                {
+                    params: {
+                        id: `eq.${jobId}`,
+                        select: [
+                            "id",
+                            "lead_id",
+                            "followup_day",
+                            "template_name",
+                            "status",
+                            "attempt_count",
+                            "claimed_at"
+                        ].join(","),
+                        limit: 1
+                    },
+                    headers: supabaseHeaders(),
+                    timeout: 10000
+                }
+            );
 
             const job = response.data?.[0];
 
@@ -1321,7 +1231,8 @@ app.get(
                 attemptCount: job.attempt_count,
                 eligibleForProcessing: eligible,
                 messageSent: false,
-                note: "Read-only preview. No job claimed or message sent."
+                note:
+                    "Read-only preview. No job claimed or message sent."
             });
 
         } catch (error) {
@@ -1337,118 +1248,152 @@ app.get(
     }
 );
 
-
-//
+// --------------------------------------------------
 // CONTROLLED FOLLOW-UP PROCESSING
-// DRY RUN ONLY — NO CLAIMING OR SENDING
+// TEST JOB ID 1 ONLY — CLAIM WITHOUT SENDING
 //
+// Deployment alone does not claim the job.
+// Requires an authenticated POST with explicit confirmation.
+// --------------------------------------------------
 
 app.post(
     "/process-followup-job/:id",
     requireAdmin,
+
     async (req, res) => {
         try {
             const jobId = Number(req.params.id);
 
-            if (!Number.isSafeInteger(jobId) || jobId < 1) {
+            if (ENABLE_AUTO_FOLLOWUP) {
+                return res.status(403).json({
+                    error:
+                        "Disable automatic follow-up first."
+                });
+            }
+
+            if (jobId !== 1) {
+                return res.status(403).json({
+                    error:
+                        "Only test Job ID 1 is permitted."
+                });
+            }
+
+            if (
+                req.body?.confirmClaim !==
+                "CLAIM_TEST_JOB_1"
+            ) {
                 return res.status(400).json({
-                    error: "Invalid job ID."
+                    error:
+                        "Explicit claim confirmation required.",
+                    jobClaimed: false,
+                    messageSent: false
                 });
             }
 
-            const jobsResponse = await axios.get(
+            // Check the current job before claiming it.
+
+            const jobResponse = await axios.get(
+                jobsTableUrl(),
+                {
+                    params: {
+                        id: "eq.1",
+                        select:
+                            "id,followup_day,template_name,status,attempt_count",
+                        limit: 1
+                    },
+                    headers: supabaseHeaders(),
+                    timeout: 10000
+                }
+            );
+
+            const job = jobResponse.data?.[0];
+
+            if (
+                !job ||
+                job.status !== "pending" ||
+                job.attempt_count !== 0 ||
+                job.followup_day !== 1 ||
+                job.template_name !==
+                    "investngain_day1_followup"
+            ) {
+                return res.status(409).json({
+                    error:
+                        "Test job is not in the expected state.",
+                    jobClaimed: false,
+                    messageSent: false
+                });
+            }
+
+            // Atomic Supabase claim.
+            // The updated SQL function checks:
+            // - pending status
+            // - attempt count
+            // - WhatsApp opt-in
+            // - stop_followup
+            // - last_reply_at
+
+            const claimResponse = await axios.post(
                 SUPABASE_URL.replace(/\/$/, "") +
-                    "/rest/v1/whatsapp_followup_jobs",
+                    "/rest/v1/rpc/claim_whatsapp_followup_job",
                 {
-                    params: {
-                        id: `eq.${jobId}`,
-                        select:
-                            "id,lead_id,followup_day,template_name,status,attempt_count",
-                        limit: 1
-                    },
+                    p_job_id: jobId
+                },
+                {
                     headers: supabaseHeaders(),
                     timeout: 10000
                 }
             );
 
-            const job = jobsResponse.data?.[0];
+            const claimedJob =
+                claimResponse.data?.[0];
 
-            if (!job) {
-                return res.status(404).json({
-                    error: "Job not found."
+            if (!claimedJob) {
+                return res.status(409).json({
+                    jobId,
+                    jobClaimed: false,
+                    messageSent: false,
+                    message:
+                        "Job was not eligible or was already claimed."
                 });
             }
 
-            const leadsResponse = await axios.get(
-                supabaseTableUrl(),
-                {
-                    params: {
-                        id: `eq.${job.lead_id}`,
-                        select:
-                            "id,phone,whatsapp_opt_in,stop_followup,last_reply_at",
-                        limit: 1
-                    },
-                    headers: supabaseHeaders(),
-                    timeout: 10000
-                }
-            );
-
-            const lead = leadsResponse.data?.[0];
-
-            const expectedTemplates = {
-                1: "investngain_day1_followup",
-                3: "investngain_day3_followup",
-                7: "_investngain_day7_followup"
-            };
-
-            const eligible = Boolean(
-                lead &&
-                validPhone(normalizePhone(lead.phone)) &&
-                job.status === "pending" &&
-                job.attempt_count === 0 &&
-                lead.whatsapp_opt_in === true &&
-                lead.stop_followup === false &&
-                !lead.last_reply_at &&
-                job.template_name ===
-                    expectedTemplates[job.followup_day]
-            );
+            // IMPORTANT:
+            // No sendTemplate() call here.
+            // No WhatsApp message is sent.
 
             return res.json({
-                jobId,
-                dryRun: true,
-                eligibleForProcessing: eligible,
-                currentStatus: job.status,
-                template: job.template_name,
-                jobClaimed: false,
+                jobId: claimedJob.id,
+                status: claimedJob.status,
+                attemptCount: claimedJob.attempt_count,
+                jobClaimed: true,
                 messageSent: false,
                 note:
-                    "Dry run only. Database unchanged. No WhatsApp message sent."
+                    "Database claim completed. WhatsApp sending remains disabled."
             });
 
         } catch (error) {
             console.error(
-                "Processing dry-run error:",
+                "Controlled claim error:",
                 error.response?.data || error.message
             );
 
             return res.status(500).json({
-                error: "Processing dry run failed."
+                error:
+                    "Claim result could not be confirmed.",
+                messageSent: false,
+                note:
+                    "Check database status before retrying. Do not automatically retry."
             });
         }
     }
 );
-
-
 
 // --------------------------------------------------
 // ERROR HANDLING
 // --------------------------------------------------
 
 app.use((error, req, res, next) => {
-    if (
-        error instanceof
-        multer.MulterError
-    ) {
+    if (error instanceof multer.MulterError) {
         return res.status(400).json({
             error:
                 "CSV upload failed. Maximum file size is 1 MB."
