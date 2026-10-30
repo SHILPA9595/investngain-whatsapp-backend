@@ -320,10 +320,10 @@ async function sendTemplate(
     requireWhatsAppConfig();
 
     const allowedTemplates = [
-        "investngain_day1_followup",
-        "investngain_day3_followup",
-        _investngain_day7_followup
-        "hello_world",
+      "investngain_day1_followup",
+      "investngain_day3_followup",
+      "_investngain_day7_followup",
+"hello_world",
         "property_update_investngain",
         "lead_followup_test",
         "new_utility_temp",
