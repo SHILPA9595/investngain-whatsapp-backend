@@ -1354,6 +1354,53 @@ app.post(
   }
 );
 
+ // --------------------------------------------------
+ // SCHEDULED JOB REGISTRATION
+ // REGISTRATION ONLY — NEVER SENDS WHATSAPP MESSAGES
+ // --------------------------------------------------
+
+app.post('/cron/register-followups', async (req, res) => {
+  const configuredSecret = process.env.CRON_SECRET;
+  const suppliedSecret = req.get('x-cron-secret');
+
+  if (!configuredSecret || !suppliedSecret) {
+    return res.status(401).json({
+      error: 'Cron authentication required.'
+    });
+  }
+
+  const expected = Buffer.from(configuredSecret);
+  const supplied = Buffer.from(suppliedSecret);
+
+  if (
+    expected.length !== supplied.length ||
+    !crypto.timingSafeEqual(expected, supplied)
+  ) {
+    return res.status(401).json({
+      error: 'Unauthorized.'
+    });
+  }
+
+  try {
+    const result = await registerPendingFollowupJobs();
+
+    return res.json({
+      ...result,
+      messagesSent: 0,
+      note: 'Registration only. WhatsApp sending is disabled.'
+    });
+  } catch (error) {
+    console.error(
+      'Scheduled registration error:',
+      errorDetails(error)
+    );
+
+    return res.status(500).json({
+      error: 'Scheduled registration failed.'
+    });
+  }
+});
+
 // --------------------------------------------------
 // PREVIEW JOB
 // NO CLAIM / NO SEND
