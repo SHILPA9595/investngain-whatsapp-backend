@@ -322,7 +322,7 @@ async function sendTemplate(
     const allowedTemplates = [
         "investngain_day1_followup",
         "investngain_day3_followup",
-        "investngain_day7_followup",
+        _investngain_day7_followup
         "hello_world",
         "property_update_investngain",
         "lead_followup_test",
