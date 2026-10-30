@@ -823,7 +823,7 @@ app.post(
 
                 results.push({
                     recipient,
-                    status: "accepted_by_meta",
+                    status: "accepted",
                     messageId:
                         response.data?.messages?.[0]?.id || null
                 });
