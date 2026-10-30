@@ -1042,6 +1042,7 @@ const ENABLE_AUTO_FOLLOWUP =
 // Maximum number of jobs registered per request.
 const FOLLOWUP_BATCH_LIMIT = 10;
 
+
 const FOLLOWUP_SCHEDULE = [
     {
         day: 1,
@@ -1056,7 +1057,7 @@ const FOLLOWUP_SCHEDULE = [
     {
         day: 7,
         afterHours: 168,
-        template: "investngain_day7_followup"
+        template: "_investngain_day7_followup"
     }
 ];
 
