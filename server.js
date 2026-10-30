@@ -1230,6 +1230,114 @@ app.get(
     }
 );
 
+//
+// SAFE FOLLOW-UP JOB PREVIEW
+// Read-only: does not claim or send anything.
+//
+
+app.get(
+    "/preview-followup-job/:id",
+    requireAdmin,
+    async (req, res) => {
+        try {
+            const jobId = Number(req.params.id);
+
+            if (
+                !Number.isSafeInteger(jobId) ||
+                jobId < 1
+            ) {
+                return res.status(400).json({
+                    error: "Invalid job ID."
+                });
+            }
+
+            const url =
+                SUPABASE_URL.replace(/\/$/, "") +
+                "/rest/v1/whatsapp_followup_jobs";
+
+            const response = await axios.get(url, {
+                params: {
+                    id: `eq.${jobId}`,
+                    select: [
+                        "id",
+                        "lead_id",
+                        "followup_day",
+                        "template_name",
+                        "status",
+                        "attempt_count",
+                        "claimed_at"
+                    ].join(","),
+                    limit: 1
+                },
+                headers: supabaseHeaders(),
+                timeout: 10000
+            });
+
+            const job = response.data?.[0];
+
+            if (!job) {
+                return res.status(404).json({
+                    error: "Job not found."
+                });
+            }
+
+            const leadResponse = await axios.get(
+                supabaseTableUrl(),
+                {
+                    params: {
+                        id: `eq.${job.lead_id}`,
+                        select:
+                            "id,whatsapp_opt_in,stop_followup,last_reply_at",
+                        limit: 1
+                    },
+                    headers: supabaseHeaders(),
+                    timeout: 10000
+                }
+            );
+
+            const lead = leadResponse.data?.[0];
+
+            const expectedTemplates = {
+                1: "investngain_day1_followup",
+                3: "investngain_day3_followup",
+                7: "_investngain_day7_followup"
+            };
+
+            const eligible = Boolean(
+                lead &&
+                job.status === "pending" &&
+                lead.whatsapp_opt_in === true &&
+                lead.stop_followup === false &&
+                !lead.last_reply_at &&
+                job.template_name ===
+                    expectedTemplates[job.followup_day]
+            );
+
+            return res.json({
+                jobId: job.id,
+                followupDay: job.followup_day,
+                template: job.template_name,
+                status: job.status,
+                attemptCount: job.attempt_count,
+                eligibleForProcessing: eligible,
+                messageSent: false,
+                note: "Read-only preview. No job claimed or message sent."
+            });
+
+        } catch (error) {
+            console.error(
+                "Follow-up preview error:",
+                error.response?.data || error.message
+            );
+
+            return res.status(500).json({
+                error: "Could not preview follow-up job."
+            });
+        }
+    }
+);
+
+
 // --------------------------------------------------
 // ERROR HANDLING
 // --------------------------------------------------
