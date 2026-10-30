@@ -1337,6 +1337,25 @@ app.get(
     }
 );
 
+//
+// CONTROLLED FOLLOW-UP PROCESSING
+// Safety lock: no message sending in this version.
+//
+
+app.post(
+    "/process-followup-job/:id",
+    requireAdmin,
+    async (req, res) => {
+        return res.status(403).json({
+            jobId: req.params.id,
+            processingEnabled: false,
+            messageSent: false,
+            message:
+                "Safety lock active. Live processing is not enabled."
+        });
+    }
+);
+
 
 // --------------------------------------------------
 // ERROR HANDLING
