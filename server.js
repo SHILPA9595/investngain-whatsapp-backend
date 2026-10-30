@@ -23,10 +23,8 @@ const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 const ENABLE_BULK_SENDING =
     process.env.ENABLE_BULK_SENDING === "true";
 
-
 const TEMPLATE_NAME = "property_update_investngain";
 const TEMPLATE_LANGUAGE = "en";
-
 
 const MAX_RECIPIENTS = 100;
 const MESSAGE_DELAY_MS = 1000;
@@ -314,23 +312,24 @@ const upload = multer({
 // WHATSAPP TEMPLATE SENDING
 // --------------------------------------------------
 
-
-async function sendTemplate(recipient, templateName = TEMPLATE_NAME, customerName = "Customer") {
+async function sendTemplate(
+    recipient,
+    templateName = TEMPLATE_NAME,
+    customerName = "Customer"
+) {
     requireWhatsAppConfig();
-    
 
-const allowedTemplates = [
-    
-"investngain_day1_followup",
-"investngain_day3_followup",
-"investngain_day7_followup",
-    "hello_world",
-    "property_update_investngain",
-    "lead_followup_test",
-    "new_utility_temp",
-    "utility_by_harsh",
-    "by_harsh_2"
-];
+    const allowedTemplates = [
+        "investngain_day1_followup",
+        "investngain_day3_followup",
+        "investngain_day7_followup",
+        "hello_world",
+        "property_update_investngain",
+        "lead_followup_test",
+        "new_utility_temp",
+        "utility_by_harsh",
+        "by_harsh_2"
+    ];
 
     if (!allowedTemplates.includes(templateName)) {
         throw new Error("Template is not allowed.");
@@ -343,7 +342,8 @@ const allowedTemplates = [
         }
     };
 
-    // by_harsh_2 requires one body variable: {{1}}
+    // by_harsh_2 requires one body variable.
+
     if (templateName === "by_harsh_2") {
         template.components = [
             {
@@ -926,9 +926,9 @@ app.post(
     }
 );
 
- // --------------------------------------------------
- // IMPORT LEADS FROM CSV
- // --------------------------------------------------
+// --------------------------------------------------
+// IMPORT LEADS FROM CSV
+// --------------------------------------------------
 
 app.post(
     "/import-leads",
@@ -1035,15 +1035,34 @@ app.post(
 // --------------------------------------------------
 
 // Keep automatic WhatsApp sending disabled during testing.
+
 const ENABLE_AUTO_FOLLOWUP =
     process.env.ENABLE_AUTO_FOLLOWUP === "true";
-  
+
+// Maximum number of jobs registered per request.
+const FOLLOWUP_BATCH_LIMIT = 10;
+
 const FOLLOWUP_SCHEDULE = [
-  { day: 1, afterHours: 24, template: "investngain_day1_followup" },
-  { day: 3, afterHours: 72, template: "investngain_day3_followup" },
-  { day: 7, afterHours: 168, template: "investngain_day7_followup" }
+    {
+        day: 1,
+        afterHours: 24,
+        template: "investngain_day1_followup"
+    },
+    {
+        day: 3,
+        afterHours: 72,
+        template: "investngain_day3_followup"
+    },
+    {
+        day: 7,
+        afterHours: 168,
+        template: "investngain_day7_followup"
+    }
 ];
 
+// --------------------------------------------------
+// CHECK PENDING FOLLOW-UPS
+// --------------------------------------------------
 
 async function getPendingFollowups() {
     const response = await axios.get(supabaseTableUrl(), {
@@ -1072,11 +1091,15 @@ async function getPendingFollowups() {
     for (const lead of response.data || []) {
         const started = Date.parse(lead.followup_started_at);
 
-        if (!Number.isFinite(started)) continue;
+        if (!Number.isFinite(started)) {
+            continue;
+        }
 
         for (const item of FOLLOWUP_SCHEDULE) {
             const column = `followup_day${item.day}_sent_at`;
-            const dueAt = started + item.afterHours * 60 * 60 * 1000;
+
+            const dueAt =
+                started + item.afterHours * 60 * 60 * 1000;
 
             if (!lead[column] && now >= dueAt) {
                 pending.push({
@@ -1095,9 +1118,93 @@ async function getPendingFollowups() {
     return pending;
 }
 
+// --------------------------------------------------
+// REGISTER PENDING FOLLOW-UP JOBS
+// This saves jobs in Supabase only.
+// No WhatsApp messages are sent here.
+// --------------------------------------------------
+
+async function registerPendingFollowupJobs() {
+    const pending = await getPendingFollowups();
+
+    const jobs = pending
+        .slice(0, FOLLOWUP_BATCH_LIMIT)
+        .map(item => ({
+            lead_id: item.id,
+            followup_day: item.day,
+            template_name: item.template,
+            status: "pending"
+        }));
+
+    if (!jobs.length) {
+        return {
+            checked: pending.length,
+            registered: 0,
+            message: "No due follow-ups."
+        };
+    }
+
+    const response = await axios.post(
+        SUPABASE_URL.replace(/\/$/, "") +
+            "/rest/v1/whatsapp_followup_jobs" +
+            "?on_conflict=lead_id,followup_day",
+        jobs,
+        {
+            headers: supabaseHeaders({
+                Prefer:
+                    "resolution=ignore-duplicates,return=representation"
+            }),
+            timeout: 10000
+        }
+    );
+
+    return {
+        checked: pending.length,
+        registered: response.data?.length || 0,
+        message:
+            "Follow-up jobs registered. No messages sent."
+    };
+}
+
+// --------------------------------------------------
+// REGISTER FOLLOW-UP JOBS API
+// Admin-protected POST endpoint.
+// --------------------------------------------------
+
+app.post(
+    "/register-followup-jobs",
+    requireAdmin,
+
+    async (req, res) => {
+        try {
+            const result =
+                await registerPendingFollowupJobs();
+
+            return res.json(result);
+
+        } catch (error) {
+            console.error(
+                "Job registration error:",
+                error.response?.data || error.message
+            );
+
+            return res.status(500).json({
+                error:
+                    "Could not register follow-up jobs."
+            });
+        }
+    }
+);
+
+// --------------------------------------------------
+// PENDING FOLLOW-UP API
+// Read-only endpoint.
+// --------------------------------------------------
+
 app.get(
     "/pending-followups",
     requireAdmin,
+
     async (req, res) => {
         try {
             const pending = await getPendingFollowups();
@@ -1107,6 +1214,7 @@ app.get(
                 pendingCount: pending.length,
                 pending
             });
+
         } catch (error) {
             console.error(
                 "Pending follow-up error:",
@@ -1114,7 +1222,8 @@ app.get(
             );
 
             return res.status(500).json({
-                error: "Could not check pending follow-ups."
+                error:
+                    "Could not check pending follow-ups."
             });
         }
     }
