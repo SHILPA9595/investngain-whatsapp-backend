@@ -1388,6 +1388,302 @@ app.post(
     }
 );
 
+//
+// CONTROLLED WHATSAPP FOLLOW-UP SEND
+// Test Job ID 1 only.
+// No scheduler. No automatic retry.
+//
+
+app.post(
+    "/send-followup-job/:id",
+    requireAdmin,
+    async (req, res) => {
+        const jobId = Number(req.params.id);
+
+        if (jobId !== 1) {
+            return res.status(403).json({
+                error: "Only test Job ID 1 is allowed."
+            });
+        }
+
+        if (ENABLE_AUTO_FOLLOWUP) {
+            return res.status(403).json({
+                error: "Automatic follow-up must remain disabled."
+            });
+        }
+
+        if (
+            req.body?.confirmSend !==
+            "SEND_TEST_FOLLOWUP_JOB_1"
+        ) {
+            return res.status(400).json({
+                error: "Explicit sending confirmation required.",
+                messageSent: false
+            });
+        }
+
+        // An independent recipient lock prevents accidental
+        // sending to a customer instead of our own test number.
+
+        const testRecipient = normalizePhone(
+            process.env.TEST_FOLLOWUP_RECIPIENT
+        );
+
+        if (!validPhone(testRecipient)) {
+            return res.status(503).json({
+                error:
+                    "TEST_FOLLOWUP_RECIPIENT is not configured."
+            });
+        }
+
+        let sendingStarted = false;
+
+        try {
+            requireWhatsAppConfig();
+            requireSupabaseConfig();
+
+            const jobResponse = await axios.get(
+                jobsTableUrl(),
+                {
+                    params: {
+                        id: `eq.${jobId}`,
+                        select:
+                            "id,lead_id,followup_day,template_name,status,attempt_count,send_started_at,meta_message_id",
+                        limit: 1
+                    },
+                    headers: supabaseHeaders(),
+                    timeout: 10000
+                }
+            );
+
+            const job = jobResponse.data?.[0];
+
+            if (
+                !job ||
+                job.status !== "processing" ||
+                job.attempt_count !== 1 ||
+                job.send_started_at !== null ||
+                job.meta_message_id !== null ||
+                job.followup_day !== 1 ||
+                job.template_name !==
+                    "investngain_day1_followup"
+            ) {
+                return res.status(409).json({
+                    error:
+                        "Job is not eligible for a first send.",
+                    messageSent: false
+                });
+            }
+
+            const leadResponse = await axios.get(
+                supabaseTableUrl(),
+                {
+                    params: {
+                        id: `eq.${job.lead_id}`,
+                        select:
+                            "id,phone,whatsapp_opt_in,stop_followup,last_reply_at",
+                        limit: 1
+                    },
+                    headers: supabaseHeaders(),
+                    timeout: 10000
+                }
+            );
+
+            const lead = leadResponse.data?.[0];
+
+            if (
+                !lead ||
+                normalizePhone(lead.phone) !== testRecipient ||
+                lead.whatsapp_opt_in !== true ||
+                lead.stop_followup !== false ||
+                lead.last_reply_at !== null
+            ) {
+                return res.status(409).json({
+                    error:
+                        "Recipient or consent verification failed.",
+                    messageSent: false
+                });
+            }
+
+            // Atomic database sending lock.
+
+            const lockResponse = await axios.post(
+                SUPABASE_URL.replace(/\/$/, "") +
+                    "/rest/v1/rpc/begin_whatsapp_followup_send",
+                {
+                    p_job_id: jobId
+                },
+                {
+                    headers: supabaseHeaders(),
+                    timeout: 10000
+                }
+            );
+
+            if (
+                !Array.isArray(lockResponse.data) ||
+                lockResponse.data.length !== 1
+            ) {
+                return res.status(409).json({
+                    error:
+                        "Sending lock unavailable. No Meta request made.",
+                    messageSent: false
+                });
+            }
+
+            sendingStarted = true;
+
+            // Recheck consent immediately before the Meta request.
+
+            const finalLeadResponse = await axios.get(
+                supabaseTableUrl(),
+                {
+                    params: {
+                        id: `eq.${job.lead_id}`,
+                        select:
+                            "phone,whatsapp_opt_in,stop_followup,last_reply_at",
+                        limit: 1
+                    },
+                    headers: supabaseHeaders(),
+                    timeout: 10000
+                }
+            );
+
+            const finalLead = finalLeadResponse.data?.[0];
+
+            if (
+                !finalLead ||
+                normalizePhone(finalLead.phone) !== testRecipient ||
+                finalLead.whatsapp_opt_in !== true ||
+                finalLead.stop_followup !== false ||
+                finalLead.last_reply_at !== null
+            ) {
+                await axios.patch(
+                    jobsTableUrl(),
+                    {
+                        status: "needs_review",
+                        last_error:
+                            "Consent check failed after sending lock.",
+                        updated_at: new Date().toISOString()
+                    },
+                    {
+                        params: {
+                            id: `eq.${jobId}`,
+                            status: "eq.processing"
+                        },
+                        headers: supabaseHeaders(),
+                        timeout: 10000
+                    }
+                );
+
+                return res.status(409).json({
+                    error: "Final consent check failed.",
+                    messageSent: false,
+                    retryAllowed: false
+                });
+            }
+
+            // This is the ONLY Meta sending call in this route.
+
+            const metaResponse = await sendTemplate(
+                testRecipient,
+                job.template_name
+            );
+
+            const metaMessageId =
+                metaResponse.data?.messages?.[0]?.id;
+
+            if (!metaMessageId) {
+                throw new Error(
+                    "Meta response did not contain a message ID."
+                );
+            }
+
+            // Atomically save Meta acceptance and the
+            // corresponding lead follow-up timestamp.
+
+            const completionResponse = await axios.post(
+                SUPABASE_URL.replace(/\/$/, "") +
+                    "/rest/v1/rpc/complete_whatsapp_followup_send",
+                {
+                    p_job_id: jobId,
+                    p_meta_message_id: metaMessageId
+                },
+                {
+                    headers: supabaseHeaders(),
+                    timeout: 10000
+                }
+            );
+
+            if (!completionResponse.data?.length) {
+                return res.status(500).json({
+                    error:
+                        "Meta accepted the message, but database completion was not confirmed.",
+                    metaMessageId,
+                    retryAllowed: false
+                });
+            }
+
+            return res.json({
+                jobId,
+                status: "accepted_by_meta",
+                metaMessageId,
+                acceptedByMeta: true,
+                note:
+                    "Meta acceptance does not guarantee delivery.",
+                retryAllowed: false
+            });
+
+        } catch (error) {
+            console.error(
+                "Controlled follow-up sending error:",
+                error.response?.data || error.message
+            );
+
+            if (sendingStarted) {
+                // The result may be uncertain after a timeout.
+                // Never automatically resend this job.
+
+                try {
+                    await axios.patch(
+                        jobsTableUrl(),
+                        {
+                            status: "needs_review",
+                            last_error: String(
+                                error.response?.data?.error?.message ||
+                                error.message
+                            ).slice(0, 1000),
+                            updated_at: new Date().toISOString()
+                        },
+                        {
+                            params: {
+                                id: `eq.${jobId}`,
+                                status: "eq.processing",
+                                meta_message_id: "is.null"
+                            },
+                            headers: supabaseHeaders(),
+                            timeout: 10000
+                        }
+                    );
+                } catch (databaseError) {
+                    console.error(
+                        "Could not record uncertain send:",
+                        databaseError.response?.data ||
+                        databaseError.message
+                    );
+                }
+            }
+
+            return res.status(500).json({
+                error:
+                    "Sending or completion could not be confirmed.",
+                retryAllowed: false,
+                note:
+                    "Inspect Meta and Supabase before taking further action. Do not resend automatically."
+            });
+        }
+    }
+);
+
 // --------------------------------------------------
 // ERROR HANDLING
 // --------------------------------------------------
