@@ -1356,30 +1356,242 @@ app.post(
 
  // --------------------------------------------------
  // SCHEDULED JOB REGISTRATION
- // REGISTRATION ONLY — NEVER SENDS WHATSAPP MESSAGES
- // --------------------------------------------------
+// --------------------------------------------------
+// SECURE AUTOMATIC FOLLOW-UP PROCESSOR
+// --------------------------------------------------
 
-app.post('/cron/register-followups', async (req, res) => {
-  const configuredSecret = process.env.CRON_SECRET;
-  const suppliedSecret = req.get('x-cron-secret');
+function verifyCronSecret(req, res) {
+  const configured = process.env.CRON_SECRET;
+  const supplied = req.get('x-cron-secret');
 
-  if (!configuredSecret || !suppliedSecret) {
-    return res.status(401).json({
+  if (!configured || !supplied) {
+    res.status(401).json({
       error: 'Cron authentication required.'
     });
+    return false;
   }
 
-  const expected = Buffer.from(configuredSecret);
-  const supplied = Buffer.from(suppliedSecret);
+  const expectedBuffer = Buffer.from(configured);
+  const suppliedBuffer = Buffer.from(supplied);
 
   if (
-    expected.length !== supplied.length ||
-    !crypto.timingSafeEqual(expected, supplied)
+    expectedBuffer.length !== suppliedBuffer.length ||
+    !crypto.timingSafeEqual(expectedBuffer, suppliedBuffer)
   ) {
-    return res.status(401).json({
-      error: 'Unauthorized.'
-    });
+    res.status(401).json({ error: 'Unauthorized.' });
+    return false;
   }
+
+  return true;
+}
+
+async function processDueFollowupJobs() {
+  const response = await axios.get(jobsUrl(), {
+    params: {
+      select: '*',
+      status: 'eq.pending',
+      attempt_count: 'eq.0',
+      send_started_at: 'is.null',
+      meta_message_id: 'is.null',
+      order: 'created_at.asc',
+      limit: FOLLOWUP_BATCH_LIMIT
+    },
+    headers: supabaseHeaders(),
+    timeout: 10000
+  });
+
+  const jobs = response.data || [];
+  const results = [];
+
+  for (const job of jobs) {
+    const id = Number(job.id);
+
+    // Job 1 is permanently protected.
+    if (id === 1) {
+      results.push({ jobId: id, status: 'protected' });
+      continue;
+    }
+
+    let claimed = false;
+    let sendStarted = false;
+    let acceptedMessageId = null;
+
+    try {
+      const lead = await readLeadById(job.lead_id);
+
+      if (
+        job.status !== 'pending' ||
+        job.attempt_count !== 0 ||
+        job.send_started_at ||
+        job.meta_message_id ||
+        !eligibleLead(lead) ||
+        !jobDue(job, lead)
+      ) {
+        results.push({
+          jobId: id,
+          status: 'skipped',
+          reason: 'Job is not currently eligible.'
+        });
+        continue;
+      }
+
+      // Atomic claim: only one worker can claim this job.
+      const claimResult = await rpc(
+        'claim_whatsapp_followup_job',
+        { p_job_id: id }
+      );
+
+      if (
+        !Array.isArray(claimResult) ||
+        claimResult.length !== 1
+      ) {
+        results.push({
+          jobId: id,
+          status: 'not_claimed'
+        });
+        continue;
+      }
+
+      claimed = true;
+
+      // Atomic send lock.
+      const lockResult = await rpc(
+        'begin_whatsapp_followup_send',
+        { p_job_id: id }
+      );
+
+      if (
+        !Array.isArray(lockResult) ||
+        lockResult.length !== 1
+      ) {
+        await patchJob(id, {
+          status: 'needs_review',
+          last_error: 'Send lock could not be confirmed.'
+        }, {
+          status: 'eq.processing'
+        });
+
+        results.push({
+          jobId: id,
+          status: 'needs_review'
+        });
+        continue;
+      }
+
+      sendStarted = true;
+
+      // Final consent and due-time check.
+      const finalLead = await readLeadById(job.lead_id);
+
+      if (
+        !eligibleLead(finalLead) ||
+        !jobDue(job, finalLead)
+      ) {
+        await patchJob(id, {
+          status: 'needs_review',
+          last_error: 'Final eligibility check failed.'
+        }, {
+          status: 'eq.processing',
+          meta_message_id: 'is.null'
+        });
+
+        results.push({
+          jobId: id,
+          status: 'needs_review'
+        });
+        continue;
+      }
+
+      // Send exactly once. Never automatically retry.
+      const meta = await sendTemplate(
+        normalizePhone(finalLead.phone),
+        job.template_name
+      );
+
+      acceptedMessageId =
+        meta.data?.messages?.[0]?.id || null;
+
+      if (!acceptedMessageId) {
+        throw new Error(
+          'Meta response did not contain a message ID.'
+        );
+      }
+
+      const completed = await rpc(
+        'complete_whatsapp_followup_send',
+        {
+          p_job_id: id,
+          p_meta_message_id: acceptedMessageId
+        }
+      );
+
+      if (
+        !Array.isArray(completed) ||
+        completed.length !== 1
+      ) {
+        throw new Error(
+          'Meta accepted the message but database completion was not confirmed.'
+        );
+      }
+
+      results.push({
+        jobId: id,
+        status: 'accepted',
+        metaMessageId: acceptedMessageId
+      });
+
+    } catch (error) {
+      console.error(
+        'Automatic follow-up error:',
+        id,
+        errorDetails(error)
+      );
+
+      // Never retry a claimed or possibly sent job automatically.
+      if (claimed) {
+        try {
+          await patchJob(id, {
+            status: 'needs_review',
+            last_error: (
+              acceptedMessageId
+                ? `Meta accepted ${acceptedMessageId}; `
+                : ''
+            ) + errorText(error)
+          }, {
+            status: 'eq.processing',
+            meta_message_id: 'is.null'
+          });
+        } catch (dbError) {
+          console.error(
+            'Could not record job review state:',
+            id,
+            errorDetails(dbError)
+          );
+        }
+      }
+
+      results.push({
+        jobId: id,
+        status: 'needs_review',
+        retryAllowed: false
+      });
+    }
+
+    await sleep(1000);
+  }
+
+  return {
+    checked: jobs.length,
+    acceptedByMeta: results.filter(
+      item => item.status === 'accepted'
+    ).length,
+    results
+  };
+}
+
+// Existing registration-only endpoint retained.
+app.post('/cron/register-followups', async (req, res) => {
+  if (!verifyCronSecret(req, res)) return;
 
   try {
     const result = await registerPendingFollowupJobs();
@@ -1387,16 +1599,53 @@ app.post('/cron/register-followups', async (req, res) => {
     return res.json({
       ...result,
       messagesSent: 0,
-      note: 'Registration only. WhatsApp sending is disabled.'
+      note: 'Registration only. No WhatsApp messages sent.'
     });
   } catch (error) {
+    console.error(errorDetails(error));
+
+    return res.status(500).json({
+      error: 'Scheduled registration failed.'
+    });
+  }
+});
+
+// New combined registration + processing endpoint.
+app.post('/cron/run-followups', async (req, res) => {
+  if (!verifyCronSecret(req, res)) return;
+
+  if (!ENABLE_AUTO_FOLLOWUP) {
+    return res.status(423).json({
+      error: 'Automatic follow-up sending is disabled.',
+      messagesSent: 0
+    });
+  }
+
+  try {
+    requireWhatsAppConfig();
+    requireSupabaseConfig();
+
+    const registration =
+      await registerPendingFollowupJobs();
+
+    const processing =
+      await processDueFollowupJobs();
+
+    return res.json({
+      success: true,
+      registration,
+      processing,
+      note: 'Meta acceptance does not guarantee delivery.'
+    });
+
+  } catch (error) {
     console.error(
-      'Scheduled registration error:',
+      'Automatic cron error:',
       errorDetails(error)
     );
 
     return res.status(500).json({
-      error: 'Scheduled registration failed.'
+      error: 'Automatic follow-up processing failed.'
     });
   }
 });
