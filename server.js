@@ -6,7 +6,6 @@ const crypto = require('crypto');
 const { parse } = require('csv-parse/sync');
 
 const app = express();
-
 const PORT = process.env.PORT || 3000;
 
 const VERIFY_TOKEN =
@@ -83,7 +82,6 @@ const errorText = error =>
 app.use(
   express.json({
     limit: '1mb',
-
     verify(req, res, buffer) {
       req.rawBody = Buffer.from(buffer);
     }
@@ -152,12 +150,8 @@ function supabaseHeaders(extra = {}) {
 
   return {
     apikey: SUPABASE_SECRET_KEY,
-
-    Authorization:
-      `Bearer ${SUPABASE_SECRET_KEY}`,
-
+    Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
     'Content-Type': 'application/json',
-
     ...extra
   };
 }
@@ -173,9 +167,7 @@ function dbUrl(path) {
 }
 
 const leadsUrl = () => dbUrl('whatsapp_leads');
-
-const jobsUrl = () =>
-  dbUrl('whatsapp_followup_jobs');
+const jobsUrl = () => dbUrl('whatsapp_followup_jobs');
 
 async function rpc(name, data) {
   const response = await axios.post(
@@ -196,7 +188,6 @@ async function readOne(url, params) {
       ...params,
       limit: 1
     },
-
     headers: supabaseHeaders(),
     timeout: 10000
   });
@@ -207,7 +198,6 @@ async function readOne(url, params) {
 async function readLeadByPhone(phone) {
   return readOne(leadsUrl(), {
     phone: `eq.${phone}`,
-
     select: [
       'id',
       'phone',
@@ -223,7 +213,6 @@ async function readLeadByPhone(phone) {
 async function readLeadById(id) {
   return readOne(leadsUrl(), {
     id: `eq.${id}`,
-
     select: [
       'id',
       'phone',
@@ -248,22 +237,18 @@ async function readJob(id) {
 async function patchJob(id, payload, filters = {}) {
   return axios.patch(
     jobsUrl(),
-
     {
       ...payload,
       updated_at: now()
     },
-
     {
       params: {
         id: `eq.${id}`,
         ...filters
       },
-
       headers: supabaseHeaders({
         Prefer: 'return=representation'
       }),
-
       timeout: 10000
     }
   );
@@ -407,12 +392,10 @@ function verifyMetaSignature(req, res, next) {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-
   limits: {
     fileSize: 1024 * 1024,
     files: 1
   },
-
   fileFilter(req, file, cb) {
     const valid =
       file.mimetype === 'text/csv' ||
@@ -457,7 +440,6 @@ async function sendTemplate(
 
   const template = {
     name: templateName,
-
     language: {
       code: TEMPLATE_LANGUAGE
     }
@@ -467,7 +449,6 @@ async function sendTemplate(
     template.components = [
       {
         type: 'body',
-
         parameters: [
           {
             type: 'text',
@@ -480,7 +461,6 @@ async function sendTemplate(
 
   return axios.post(
     `https://graph.facebook.com/v26.0/${PHONE_NUMBER_ID}/messages`,
-
     {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
@@ -488,15 +468,12 @@ async function sendTemplate(
       type: 'template',
       template
     },
-
     {
       headers: {
         Authorization:
           `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-
         'Content-Type': 'application/json'
       },
-
       timeout: 20000
     }
   );
@@ -537,7 +514,6 @@ app.get('/webhook', (req, res) => {
 app.post(
   '/webhook',
   verifyMetaSignature,
-
   async (req, res) => {
     try {
       for (const entry of req.body?.entry || []) {
@@ -559,7 +535,6 @@ app.post(
 
             await axios.post(
               `${leadsUrl()}?on_conflict=phone`,
-
               {
                 phone,
                 lead_status: classifyLead(message),
@@ -568,12 +543,10 @@ app.post(
                 last_reply_at: now(),
                 updated_at: now()
               },
-
               {
                 headers: supabaseHeaders({
                   Prefer: 'resolution=merge-duplicates'
                 }),
-
                 timeout: 10000
               }
             );
@@ -607,17 +580,17 @@ app.post(
 
             const matching = await readOne(
               jobsUrl(),
-
               {
-                meta_message_id:
-                  `eq.${messageId}`,
-
-                select:
-                  'id,status,meta_delivery_status'
+                meta_message_id: `eq.${messageId}`,
+                select: 'id,status,meta_delivery_status'
               }
             );
 
             if (!matching) {
+              console.log(
+                'Delivery status received but matching job was not found:',
+                messageId
+              );
               continue;
             }
 
@@ -630,8 +603,7 @@ app.post(
             };
 
             const previous =
-              matching.meta_delivery_status ||
-              'accepted';
+              matching.meta_delivery_status || 'accepted';
 
             if (
               (rank[status.status] || 0) <
@@ -668,7 +640,6 @@ app.post(
 
             if (status.status === 'failed') {
               payload.status = 'needs_review';
-
               payload.last_error = JSON.stringify(
                 status.errors || []
               ).slice(0, 1000);
@@ -677,10 +648,8 @@ app.post(
             await patchJob(
               matching.id,
               payload,
-
               {
-                meta_message_id:
-                  `eq.${messageId}`
+                meta_message_id: `eq.${messageId}`
               }
             );
 
@@ -713,7 +682,6 @@ app.post(
 app.get(
   '/followup-status',
   requireAdmin,
-
   async (req, res) => {
     try {
       const phone = normalizePhone(
@@ -730,11 +698,7 @@ app.get(
 
       return res.json({
         recipient: phone,
-
-        stopFollowUp: Boolean(
-          lead?.stop_followup
-        ),
-
+        stopFollowUp: Boolean(lead?.stop_followup),
         details: lead
           ? {
               stopped: lead.stop_followup,
@@ -762,7 +726,6 @@ app.get(
 app.post(
   '/send-message',
   requireAdmin,
-
   async (req, res) => {
     try {
       const recipient = normalizePhone(
@@ -784,26 +747,21 @@ app.post(
 
       const response = await axios.post(
         `https://graph.facebook.com/v26.0/${PHONE_NUMBER_ID}/messages`,
-
         {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
           to: recipient,
           type: 'text',
-
           text: {
             body: message
           }
         },
-
         {
           headers: {
             Authorization:
               `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-
             'Content-Type': 'application/json'
           },
-
           timeout: 20000
         }
       );
@@ -830,7 +788,6 @@ app.post(
 app.post(
   '/send-template',
   requireAdmin,
-
   async (req, res) => {
     try {
       const phone = normalizePhone(
@@ -845,10 +802,10 @@ app.post(
 
       const lead = await readLeadByPhone(phone);
 
-      if (lead?.stop_followup) {
+      if (!eligibleLead(lead)) {
         return res.status(409).json({
-          error: 'Customer has already replied.',
-          leadStatus: lead.lead_status
+          error:
+            'Lead is missing, has no valid opt-in, or is not eligible for messaging.'
         });
       }
 
@@ -878,7 +835,6 @@ app.post(
   '/bulk-template',
   requireAdmin,
   upload.single('file'),
-
   async (req, res) => {
     if (!ENABLE_BULK_SENDING) {
       return res.status(403).json({
@@ -930,7 +886,6 @@ app.post(
 
     const seen = new Set();
     const recipients = [];
-
     let skipped = 0;
 
     for (const row of rows) {
@@ -974,7 +929,6 @@ app.post(
       return res.status(400).json({
         error:
           `Maximum ${MAX_RECIPIENTS} recipients allowed.`,
-
         eligible: recipients.length,
         skipped
       });
@@ -1007,7 +961,6 @@ app.post(
           results.push({
             recipient: phone,
             status: 'skipped',
-
             reason:
               'Lead missing, no opt-in, or already replied'
           });
@@ -1021,10 +974,8 @@ app.post(
         results.push({
           recipient: phone,
           status: 'accepted',
-
           messageId:
-            response.data?.messages?.[0]?.id ||
-            null
+            response.data?.messages?.[0]?.id || null
         });
 
       } catch (error) {
@@ -1040,20 +991,15 @@ app.post(
 
     return res.json({
       totalProcessed: results.length,
-
       acceptedByMeta: results.filter(
         item => item.status === 'accepted'
       ).length,
-
       failed: results.filter(
         item => item.status === 'failed'
       ).length,
-
       skipped,
-
       note:
         'Meta acceptance does not guarantee delivery.',
-
       results
     });
   }
@@ -1067,7 +1013,6 @@ app.post(
   '/import-leads',
   requireAdmin,
   upload.single('file'),
-
   async (req, res) => {
     try {
       if (!req.file) {
@@ -1081,7 +1026,6 @@ app.post(
           headers.map(
             value => value.trim().toLowerCase()
           ),
-
         skip_empty_lines: true,
         trim: true,
         bom: true
@@ -1094,7 +1038,6 @@ app.post(
       }
 
       const seen = new Set();
-
       let imported = 0;
       let skipped = 0;
 
@@ -1124,7 +1067,6 @@ app.post(
 
         const response = await axios.post(
           `${leadsUrl()}?on_conflict=phone`,
-
           {
             phone,
             lead_source: 'CSV',
@@ -1133,13 +1075,11 @@ app.post(
             stop_followup: false,
             lead_status: 'NEW'
           },
-
           {
             headers: supabaseHeaders({
               Prefer:
                 'resolution=ignore-duplicates,return=representation'
             }),
-
             timeout: 10000
           }
         );
@@ -1178,7 +1118,6 @@ app.post(
 async function getPendingFollowups() {
   const response = await axios.get(
     leadsUrl(),
-
     {
       params: {
         select: [
@@ -1190,17 +1129,13 @@ async function getPendingFollowups() {
           'followup_day7_sent_at',
           'last_reply_at'
         ].join(','),
-
         whatsapp_opt_in: 'eq.true',
         stop_followup: 'eq.false',
         last_reply_at: 'is.null',
-
         followup_started_at: 'not.is.null',
-
         order: 'followup_started_at.asc',
         limit: 100
       },
-
       headers: supabaseHeaders(),
       timeout: 10000
     }
@@ -1233,9 +1168,7 @@ async function getPendingFollowups() {
           phone: lead.phone,
           day: item.day,
           template: item.template,
-
-          dueAt:
-            new Date(dueAt).toISOString()
+          dueAt: new Date(dueAt).toISOString()
         });
 
         break;
@@ -1273,25 +1206,19 @@ async function registerPendingFollowupJobs() {
 
   const response = await axios.post(
     `${jobsUrl()}?on_conflict=lead_id,followup_day`,
-
     jobs,
-
     {
       headers: supabaseHeaders({
         Prefer:
           'resolution=ignore-duplicates,return=representation'
       }),
-
       timeout: 10000
     }
   );
 
   return {
     checked: pending.length,
-
-    registered:
-      response.data?.length || 0,
-
+    registered: response.data?.length || 0,
     message:
       'Follow-up jobs registered. No messages sent.'
   };
@@ -1304,16 +1231,12 @@ async function registerPendingFollowupJobs() {
 app.get(
   '/pending-followups',
   requireAdmin,
-
   async (req, res) => {
     try {
-      const pending =
-        await getPendingFollowups();
+      const pending = await getPendingFollowups();
 
       return res.json({
-        autoSendingEnabled:
-          ENABLE_AUTO_FOLLOWUP,
-
+        autoSendingEnabled: ENABLE_AUTO_FOLLOWUP,
         pendingCount: pending.length,
         pending
       });
@@ -1335,7 +1258,6 @@ app.get(
 app.post(
   '/register-followup-jobs',
   requireAdmin,
-
   async (req, res) => {
     try {
       const result =
@@ -1354,10 +1276,8 @@ app.post(
   }
 );
 
- // --------------------------------------------------
- // SCHEDULED JOB REGISTRATION
 // --------------------------------------------------
-// SECURE AUTOMATIC FOLLOW-UP PROCESSOR
+// SECURE CRON AUTHENTICATION
 // --------------------------------------------------
 
 function verifyCronSecret(req, res) {
@@ -1376,29 +1296,41 @@ function verifyCronSecret(req, res) {
 
   if (
     expectedBuffer.length !== suppliedBuffer.length ||
-    !crypto.timingSafeEqual(expectedBuffer, suppliedBuffer)
+    !crypto.timingSafeEqual(
+      expectedBuffer,
+      suppliedBuffer
+    )
   ) {
-    res.status(401).json({ error: 'Unauthorized.' });
+    res.status(401).json({
+      error: 'Unauthorized.'
+    });
     return false;
   }
 
   return true;
 }
 
+// --------------------------------------------------
+// AUTOMATIC FOLLOW-UP PROCESSOR
+// --------------------------------------------------
+
 async function processDueFollowupJobs() {
-  const response = await axios.get(jobsUrl(), {
-    params: {
-      select: '*',
-      status: 'eq.pending',
-      attempt_count: 'eq.0',
-      send_started_at: 'is.null',
-      meta_message_id: 'is.null',
-      order: 'created_at.asc',
-      limit: FOLLOWUP_BATCH_LIMIT
-    },
-    headers: supabaseHeaders(),
-    timeout: 10000
-  });
+  const response = await axios.get(
+    jobsUrl(),
+    {
+      params: {
+        select: '*',
+        status: 'eq.pending',
+        attempt_count: 'eq.0',
+        send_started_at: 'is.null',
+        meta_message_id: 'is.null',
+        order: 'created_at.asc',
+        limit: FOLLOWUP_BATCH_LIMIT
+      },
+      headers: supabaseHeaders(),
+      timeout: 10000
+    }
+  );
 
   const jobs = response.data || [];
   const results = [];
@@ -1406,14 +1338,17 @@ async function processDueFollowupJobs() {
   for (const job of jobs) {
     const id = Number(job.id);
 
-    // Job 1 is permanently protected.
+    // JOB ID 1 IS PERMANENTLY PROTECTED.
+
     if (id === 1) {
-      results.push({ jobId: id, status: 'protected' });
+      results.push({
+        jobId: id,
+        status: 'protected'
+      });
       continue;
     }
 
     let claimed = false;
-    let sendStarted = false;
     let acceptedMessageId = null;
 
     try {
@@ -1435,7 +1370,8 @@ async function processDueFollowupJobs() {
         continue;
       }
 
-      // Atomic claim: only one worker can claim this job.
+      // ATOMIC CLAIM
+
       const claimResult = await rpc(
         'claim_whatsapp_followup_job',
         { p_job_id: id }
@@ -1454,7 +1390,8 @@ async function processDueFollowupJobs() {
 
       claimed = true;
 
-      // Atomic send lock.
+      // ATOMIC SEND LOCK
+
       const lockResult = await rpc(
         'begin_whatsapp_followup_send',
         { p_job_id: id }
@@ -1464,12 +1401,17 @@ async function processDueFollowupJobs() {
         !Array.isArray(lockResult) ||
         lockResult.length !== 1
       ) {
-        await patchJob(id, {
-          status: 'needs_review',
-          last_error: 'Send lock could not be confirmed.'
-        }, {
-          status: 'eq.processing'
-        });
+        await patchJob(
+          id,
+          {
+            status: 'needs_review',
+            last_error:
+              'Send lock could not be confirmed.'
+          },
+          {
+            status: 'eq.processing'
+          }
+        );
 
         results.push({
           jobId: id,
@@ -1478,22 +1420,26 @@ async function processDueFollowupJobs() {
         continue;
       }
 
-      sendStarted = true;
+      // FINAL CONSENT AND DUE-TIME CHECK
 
-      // Final consent and due-time check.
       const finalLead = await readLeadById(job.lead_id);
 
       if (
         !eligibleLead(finalLead) ||
         !jobDue(job, finalLead)
       ) {
-        await patchJob(id, {
-          status: 'needs_review',
-          last_error: 'Final eligibility check failed.'
-        }, {
-          status: 'eq.processing',
-          meta_message_id: 'is.null'
-        });
+        await patchJob(
+          id,
+          {
+            status: 'needs_review',
+            last_error:
+              'Final eligibility check failed.'
+          },
+          {
+            status: 'eq.processing',
+            meta_message_id: 'is.null'
+          }
+        );
 
         results.push({
           jobId: id,
@@ -1502,7 +1448,8 @@ async function processDueFollowupJobs() {
         continue;
       }
 
-      // Send exactly once. Never automatically retry.
+      // SEND EXACTLY ONCE
+
       const meta = await sendTemplate(
         normalizePhone(finalLead.phone),
         job.template_name
@@ -1547,20 +1494,24 @@ async function processDueFollowupJobs() {
         errorDetails(error)
       );
 
-      // Never retry a claimed or possibly sent job automatically.
       if (claimed) {
         try {
-          await patchJob(id, {
-            status: 'needs_review',
-            last_error: (
-              acceptedMessageId
-                ? `Meta accepted ${acceptedMessageId}; `
-                : ''
-            ) + errorText(error)
-          }, {
-            status: 'eq.processing',
-            meta_message_id: 'is.null'
-          });
+          await patchJob(
+            id,
+            {
+              status: 'needs_review',
+              last_error: (
+                acceptedMessageId
+                  ? `Meta accepted ${acceptedMessageId}; `
+                  : ''
+              ) + errorText(error)
+            },
+            {
+              status: 'eq.processing',
+              meta_message_id: 'is.null'
+            }
+          );
+
         } catch (dbError) {
           console.error(
             'Could not record job review state:',
@@ -1589,66 +1540,84 @@ async function processDueFollowupJobs() {
   };
 }
 
-// Existing registration-only endpoint retained.
-app.post('/cron/register-followups', async (req, res) => {
-  if (!verifyCronSecret(req, res)) return;
+// --------------------------------------------------
+// REGISTRATION-ONLY CRON ENDPOINT
+// --------------------------------------------------
 
-  try {
-    const result = await registerPendingFollowupJobs();
+app.post(
+  '/cron/register-followups',
+  async (req, res) => {
+    if (!verifyCronSecret(req, res)) return;
 
-    return res.json({
-      ...result,
-      messagesSent: 0,
-      note: 'Registration only. No WhatsApp messages sent.'
-    });
-  } catch (error) {
-    console.error(errorDetails(error));
+    try {
+      const result =
+        await registerPendingFollowupJobs();
 
-    return res.status(500).json({
-      error: 'Scheduled registration failed.'
-    });
+      return res.json({
+        ...result,
+        messagesSent: 0,
+        note:
+          'Registration only. No WhatsApp messages sent.'
+      });
+
+    } catch (error) {
+      console.error(errorDetails(error));
+
+      return res.status(500).json({
+        error: 'Scheduled registration failed.'
+      });
+    }
   }
-});
+);
 
-// New combined registration + processing endpoint.
-app.post('/cron/run-followups', async (req, res) => {
-  if (!verifyCronSecret(req, res)) return;
+// --------------------------------------------------
+// COMBINED REGISTRATION + PROCESSING ENDPOINT
+// --------------------------------------------------
 
-  if (!ENABLE_AUTO_FOLLOWUP) {
-    return res.status(423).json({
-      error: 'Automatic follow-up sending is disabled.',
-      messagesSent: 0
-    });
+app.post(
+  '/cron/run-followups',
+  async (req, res) => {
+    if (!verifyCronSecret(req, res)) return;
+
+    if (!ENABLE_AUTO_FOLLOWUP) {
+      return res.status(423).json({
+        error:
+          'Automatic follow-up sending is disabled.',
+        messagesSent: 0
+      });
+    }
+
+    try {
+      requireWhatsAppConfig();
+      requireSupabaseConfig();
+
+      const registration =
+        await registerPendingFollowupJobs();
+
+      const processing =
+        await processDueFollowupJobs();
+
+      return res.json({
+        success: true,
+        registration,
+        processing,
+        note:
+          'Meta acceptance does not guarantee delivery.'
+      });
+
+    } catch (error) {
+      console.error(
+        'Automatic cron error:',
+        errorDetails(error)
+      );
+
+      return res.status(500).json({
+        error:
+          'Automatic follow-up processing failed.'
+      });
+    }
   }
-
-  try {
-    requireWhatsAppConfig();
-    requireSupabaseConfig();
-
-    const registration =
-      await registerPendingFollowupJobs();
-
-    const processing =
-      await processDueFollowupJobs();
-
-    return res.json({
-      success: true,
-      registration,
-      processing,
-      note: 'Meta acceptance does not guarantee delivery.'
-    });
-
-  } catch (error) {
-    console.error(
-      'Automatic cron error:',
-      errorDetails(error)
-    );
-
-    return res.status(500).json({
-      error: 'Automatic follow-up processing failed.'
-    });
-  }
-});
+);
 
 // --------------------------------------------------
 // PREVIEW JOB
@@ -1658,7 +1627,6 @@ app.post('/cron/run-followups', async (req, res) => {
 app.get(
   '/preview-followup-job/:id',
   requireAdmin,
-
   async (req, res) => {
     try {
       const id = Number(req.params.id);
@@ -1680,9 +1648,7 @@ app.get(
         });
       }
 
-      const lead = await readLeadById(
-        job.lead_id
-      );
+      const lead = await readLeadById(job.lead_id);
 
       const eligible = Boolean(
         id !== 1 &&
@@ -1700,10 +1666,8 @@ app.get(
         template: job.template_name,
         status: job.status,
         attemptCount: job.attempt_count,
-
         eligibleForProcessing: eligible,
         messageSent: false,
-
         note:
           'Read-only preview. Job ID 1 is permanently excluded from further sending.'
       });
@@ -1726,7 +1690,6 @@ app.get(
 app.post(
   '/process-followup-job/:id',
   requireAdmin,
-
   (req, res) => {
     return res.status(410).json({
       error:
@@ -1738,7 +1701,6 @@ app.post(
 app.post(
   '/send-followup-job/:id',
   requireAdmin,
-
   (req, res) => {
     return res.status(410).json({
       error:
@@ -1750,13 +1712,12 @@ app.post(
 // --------------------------------------------------
 // CONTROLLED FOLLOW-UP SEND
 // TEST RECIPIENT ONLY
-// NO SCHEDULER / NO AUTOMATIC RETRY
+// NO AUTOMATIC RETRY
 // --------------------------------------------------
 
 app.post(
   '/send-controlled-followup/:id',
   requireAdmin,
-
   async (req, res) => {
     const id = Number(req.params.id);
 
@@ -1802,6 +1763,7 @@ app.post(
 
     let sendStarted = false;
     let acceptedMessageId = null;
+    let claimedSuccessfully = false;
 
     try {
       requireWhatsAppConfig();
@@ -1826,16 +1788,14 @@ app.post(
         return res.status(409).json({
           error:
             'Job is not eligible, not due, already attempted, or recipient is not the test number.',
-
           messageSent: false
         });
       }
 
-      // Atomic database claim.
+      // ATOMIC DATABASE CLAIM
 
       const claimed = await rpc(
         'claim_whatsapp_followup_job',
-
         {
           p_job_id: id
         }
@@ -1848,16 +1808,16 @@ app.post(
         return res.status(409).json({
           error:
             'Atomic claim unavailable. No Meta request made.',
-
           messageSent: false
         });
       }
 
-      // Atomic sending lock.
+      claimedSuccessfully = true;
+
+      // ATOMIC SENDING LOCK
 
       const locked = await rpc(
         'begin_whatsapp_followup_send',
-
         {
           p_job_id: id
         }
@@ -1867,17 +1827,28 @@ app.post(
         !Array.isArray(locked) ||
         locked.length !== 1
       ) {
+        await patchJob(
+          id,
+          {
+            status: 'needs_review',
+            last_error:
+              'Sending lock unavailable after claim.'
+          },
+          {
+            status: 'eq.processing'
+          }
+        );
+
         return res.status(409).json({
           error:
-            'Sending lock unavailable. Inspect claimed job; do not retry blindly.',
-
+            'Sending lock unavailable. Job moved to review; do not retry blindly.',
           messageSent: false
         });
       }
 
       sendStarted = true;
 
-      // Final eligibility check.
+      // FINAL ELIGIBILITY CHECK
 
       const finalLead = await readLeadById(
         job.lead_id
@@ -1886,19 +1857,15 @@ app.post(
       if (
         !eligibleLead(finalLead) ||
         !jobDue(job, finalLead) ||
-        normalizePhone(finalLead.phone) !==
-          testRecipient
+        normalizePhone(finalLead.phone) !== testRecipient
       ) {
         await patchJob(
           id,
-
           {
             status: 'needs_review',
-
             last_error:
               'Final consent/due check failed after sending lock.'
           },
-
           {
             status: 'eq.processing',
             meta_message_id: 'is.null'
@@ -1908,13 +1875,12 @@ app.post(
         return res.status(409).json({
           error:
             'Final eligibility check failed.',
-
           messageSent: false,
           retryAllowed: false
         });
       }
 
-      // Only Meta sending call in this endpoint.
+      // ONLY META SENDING CALL IN THIS ENDPOINT
 
       const meta = await sendTemplate(
         testRecipient,
@@ -1922,8 +1888,7 @@ app.post(
       );
 
       acceptedMessageId =
-        meta.data?.messages?.[0]?.id ||
-        null;
+        meta.data?.messages?.[0]?.id || null;
 
       if (!acceptedMessageId) {
         throw new Error(
@@ -1931,12 +1896,10 @@ app.post(
         );
       }
 
-      // Complete database transaction.
-      // SQL function now uses status = accepted.
+      // COMPLETE DATABASE TRANSACTION
 
       const completed = await rpc(
         'complete_whatsapp_followup_send',
-
         {
           p_job_id: id,
           p_meta_message_id: acceptedMessageId
@@ -1958,7 +1921,6 @@ app.post(
         metaMessageId: acceptedMessageId,
         acceptedByMeta: true,
         retryAllowed: false,
-
         note:
           'Meta acceptance does not guarantee delivery.'
       });
@@ -1967,13 +1929,12 @@ app.post(
       console.error(
         'Controlled follow-up error:',
         errorDetails(error),
-
         acceptedMessageId
           ? { acceptedMessageId }
           : ''
       );
 
-      if (sendStarted) {
+      if (claimedSuccessfully) {
         try {
           const lastError = acceptedMessageId
             ? (
@@ -1984,12 +1945,10 @@ app.post(
 
           await patchJob(
             id,
-
             {
               status: 'needs_review',
               last_error: lastError.slice(0, 1000)
             },
-
             {
               status: 'eq.processing',
               meta_message_id: 'is.null'
@@ -2007,14 +1966,9 @@ app.post(
       return res.status(500).json({
         error:
           'Sending or completion could not be confirmed.',
-
-        acceptedByMeta:
-          Boolean(acceptedMessageId),
-
+        acceptedByMeta: Boolean(acceptedMessageId),
         metaMessageId: acceptedMessageId,
-
         retryAllowed: false,
-
         note:
           'Inspect Meta and Supabase. Never resend automatically.'
       });
@@ -2030,7 +1984,6 @@ app.post(
 app.get(
   '/followup-job-status/:id',
   requireAdmin,
-
   async (req, res) => {
     try {
       const id = Number(req.params.id);
@@ -2056,22 +2009,11 @@ app.get(
         id: job.id,
         status: job.status,
         attemptCount: job.attempt_count,
-
-        metaMessageId:
-          job.meta_message_id,
-
-        metaDeliveryStatus:
-          job.meta_delivery_status,
-
-        metaAcceptedAt:
-          job.meta_accepted_at,
-
-        sendStartedAt:
-          job.send_started_at,
-
-        lastError:
-          job.last_error,
-
+        metaMessageId: job.meta_message_id,
+        metaDeliveryStatus: job.meta_delivery_status,
+        metaAcceptedAt: job.meta_accepted_at,
+        sendStartedAt: job.send_started_at,
+        lastError: job.last_error,
         retryAllowed: false
       });
 
