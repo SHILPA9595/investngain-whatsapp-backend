@@ -1,4 +1,3 @@
-
 name: Invest N Gain Followup Scheduler
 
 on:
@@ -11,16 +10,16 @@ permissions:
   contents: read
 
 concurrency:
-  group: investngain-followup-registration
+  group: investngain-followup-processor
   cancel-in-progress: false
 
 jobs:
-  register-followups:
+  process-followups:
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - name: Register due followup jobs
+      - name: Process due followup jobs
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
@@ -29,13 +28,26 @@ jobs:
             exit 1
           fi
 
-          curl \
-            --fail-with-body \
+          HTTP_STATUS=$(curl \
             --silent \
             --show-error \
             --max-time 120 \
+            --output response.txt \
+            --write-out "%{http_code}" \
             --request POST \
             --header "x-cron-secret: $CRON_SECRET" \
             --header "Content-Type: application/json" \
             --data '{}' \
-            https://investngain-whatsapp-backend.onrender.com/cron/register-followups
+            https://investngain-whatsapp-backend.onrender.com/cron/run-followups)
+
+          cat response.txt
+          echo ""
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "Follow-up processor completed."
+          elif [ "$HTTP_STATUS" = "423" ]; then
+            echo "Automatic sending is OFF. No messages were sent."
+          else
+            echo "Follow-up processor failed with HTTP $HTTP_STATUS"
+            exit 1
+          fi
