@@ -644,80 +644,83 @@ app.post(
               errors: status.errors || []
             });
 
-            const matching = await readOne(
-              jobsUrl(),
-              {
-                meta_message_id: `eq.${messageId}`,
-                select: 'id,status,meta_delivery_status'
-              }
-            );
+           
+const matching = await readOne(
+  jobsUrl(),
+  {
+    meta_message_id: `eq.${messageId}`,
+    select: 'id,status,meta_delivery_status'
+  }
+);
 
-            if (!matching) {
-              console.log(
-                'Delivery status received but matching job was not found:',
-                messageId
-              );
-              continue;
-            }
+if (!matching) {
+  console.log('WhatsApp delivery status:', {
+    messageId,
+    status: status.status,
+    errors: status.errors || [],
+    note: 'No matching follow-up job. This may be a manually sent message.'
+  });
+  continue;
+}
 
-            const rank = {
-              accepted: 0,
-              sent: 1,
-              delivered: 2,
-              read: 3,
-              failed: 1
-            };
+const rank = {
+  accepted: 0,
+  sent: 1,
+  delivered: 2,
+  read: 3,
+  failed: 1
+};
 
-            const previous =
-              matching.meta_delivery_status || 'accepted';
+const previous =
+  matching.meta_delivery_status || 'accepted';
 
-            if (
-              (rank[status.status] || 0) <
-              (rank[previous] || 0)
-            ) {
-              continue;
-            }
+if (
+  (rank[status.status] ?? 0) <
+  (rank[previous] ?? 0)
+) {
+  continue;
+}
 
-            if (
-              previous === 'failed' &&
-              status.status !== 'failed'
-            ) {
-              continue;
-            }
+if (
+  previous === 'failed' &&
+  status.status !== 'failed'
+) {
+  continue;
+}
 
-            if (
-              status.status === 'failed' &&
-              ['delivered', 'read'].includes(previous)
-            ) {
-              continue;
-            }
+if (
+  status.status === 'failed' &&
+  ['delivered', 'read'].includes(previous)
+) {
+  continue;
+}
 
-            const payload = {
-              meta_delivery_status: status.status,
-              meta_status_updated_at: now()
-            };
+const payload = {
+  meta_delivery_status: status.status,
+  meta_status_updated_at: now()
+};
 
-            if (
-              status.status === 'delivered' ||
-              status.status === 'read'
-            ) {
-              payload.status = 'delivered';
-            }
+if (
+  status.status === 'delivered' ||
+  status.status === 'read'
+) {
+  payload.status = 'delivered';
+}
 
-            if (status.status === 'failed') {
-              payload.status = 'needs_review';
-              payload.last_error = JSON.stringify(
-                status.errors || []
-              ).slice(0, 1000);
-            }
+if (status.status === 'failed') {
+  payload.status = 'needs_review';
+  payload.last_error = JSON.stringify(
+    status.errors || []
+  ).slice(0, 1000);
+}
 
-            await patchJob(
-              matching.id,
-              payload,
-              {
-                meta_message_id: `eq.${messageId}`
-              }
-            );
+await patchJob(
+  matching.id,
+  payload,
+  {
+    meta_message_id: `eq.${messageId}`
+  }
+);
 
             console.log(
               'Follow-up delivery event recorded:',
