@@ -490,6 +490,63 @@ app.get('/', (req, res) => {
 });
 
 // --------------------------------------------------
+// ADMIN: WHATSAPP CONNECTION CHECK
+// --------------------------------------------------
+
+app.get(
+  '/admin/whatsapp-connection-check',
+  requireAdmin,
+  async (req, res) => {
+    try {
+      requireWhatsAppConfig();
+
+      const response = await axios.get(
+        `https://graph.facebook.com/v26.0/${PHONE_NUMBER_ID}`,
+        {
+          params: {
+            fields: 'display_phone_number,verified_name'
+          },
+          headers: {
+            Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`
+          },
+          timeout: 15000
+        }
+      );
+
+      return res.status(200).json({
+        ok: true,
+        whatsapp_api: 'connected',
+        phone_number_id: PHONE_NUMBER_ID,
+        display_phone_number:
+          response.data?.display_phone_number || null,
+        verified_name:
+          response.data?.verified_name || null
+      });
+    } catch (error) {
+      const status = error.response?.status || 502;
+      const metaError = error.response?.data?.error;
+
+      console.error(
+        'WhatsApp connection check failed:',
+        metaError?.code || error.code || 'UNKNOWN',
+        metaError?.message || error.message
+      );
+
+      return res.status(status).json({
+        ok: false,
+        whatsapp_api: 'not_verified',
+        phone_number_id: PHONE_NUMBER_ID || null,
+        error_code: metaError?.code || null,
+        error_subcode: metaError?.error_subcode || null,
+        error: String(
+          metaError?.message || 'WhatsApp API connection check failed.'
+        ).slice(0, 300)
+      });
+    }
+  }
+);
+
+// --------------------------------------------------
 // META WEBHOOK VERIFICATION
 // --------------------------------------------------
 
