@@ -635,6 +635,15 @@ app.post(
               continue;
             }
 
+            // LOG EVERY META DELIVERY EVENT, INCLUDING MANUAL MESSAGES
+            console.log('WhatsApp delivery status:', {
+              messageId,
+              status: status.status,
+              recipient: status.recipient_id || null,
+              timestamp: status.timestamp || null,
+              errors: status.errors || []
+            });
+
             const matching = await readOne(
               jobsUrl(),
               {
@@ -822,6 +831,11 @@ app.post(
           timeout: 20000
         }
       );
+
+      console.log('Manual WhatsApp message accepted by Meta:', {
+        recipient,
+        messageId: response.data?.messages?.[0]?.id || null
+      });
 
       return res.json(response.data);
 
