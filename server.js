@@ -27,7 +27,7 @@ const ENABLE_AUTO_FOLLOWUP =
   process.env.ENABLE_AUTO_FOLLOWUP === 'true';
 
 const TEMPLATE_LANGUAGE = 'en';
-const TEMPLATE_NAME = 'max_senior_living';
+const TEMPLATE_NAME = 'demo';
 
 const MAX_RECIPIENTS = 100;
 const FOLLOWUP_BATCH_LIMIT = 10;
