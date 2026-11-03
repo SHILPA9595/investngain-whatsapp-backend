@@ -429,6 +429,7 @@ async function sendTemplate(
     'hello_world',
     'property_update_investngain',
     'demo_investngain',
+    'demo',
     'investngain_govardhan_puja_greeting',
     'max_senior_living',
     'lead_followup_test',
