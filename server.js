@@ -29,7 +29,7 @@ const ENABLE_AUTO_FOLLOWUP =
 const TEMPLATE_LANGUAGE = 'en';
 const TEMPLATE_NAME = 'demo';
 
-const MAX_RECIPIENTS = 100;
+const MAX_RECIPIENTS = 200;
 const FOLLOWUP_BATCH_LIMIT = 10;
 
 const FOLLOWUP_SCHEDULE = [
@@ -1107,9 +1107,9 @@ app.post(
         bom: true
       });
 
-      if (rows.length > 100) {
+      if (rows.length > 200) {
         return res.status(400).json({
-          error: 'Maximum 100 rows per upload.'
+          error: 'Maximum 200 rows per upload.'
         });
       }
 
