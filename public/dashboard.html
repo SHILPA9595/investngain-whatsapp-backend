@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Invest N Gain | WhatsApp Campaigns</title>
+<style>
+:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f4f6fa}*{box-sizing:border-box}body{margin:0}.top{background:#111b31;color:white;padding:22px max(20px,calc((100% - 1080px)/2));display:flex;align-items:center;justify-content:space-between}.top h1{font-size:20px;margin:0}.top small{color:#b8c3d8}.wrap{max-width:1080px;margin:28px auto;padding:0 18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{background:#fff;border:1px solid #e2e7f0;border-radius:14px;padding:22px;box-shadow:0 3px 14px #1b2b4810}.wide{grid-column:1/-1}h2{font-size:17px;margin:0 0 8px}.muted{color:#68758b;font-size:13px;line-height:1.5}.field{display:flex;flex-direction:column;gap:7px;margin:14px 0}label{font-size:13px;font-weight:650}input[type=password],input[type=text],input[type=tel],input[type=file]{width:100%;padding:11px 12px;border:1px solid #ccd4e1;border-radius:8px;font:inherit;background:#fff}button{border:0;border-radius:8px;padding:11px 16px;background:#1e5bd7;color:white;font-weight:650;cursor:pointer}button.secondary{background:#eaf0fb;color:#23416e}button:disabled{opacity:.5;cursor:not-allowed}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.status{font-size:12px;padding:6px 10px;border-radius:20px;background:#edf1f7;color:#526078}.status.ok{background:#e7f7ee;color:#176b3a}.status.bad{background:#fff0ef;color:#a62a22}.notice{padding:12px;border-radius:8px;background:#fff8e8;color:#775315;font-size:13px;line-height:1.5;margin-top:12px}.result{white-space:pre-wrap;background:#101a2d;color:#d9e5ff;padding:14px;border-radius:9px;font:12px/1.55 Consolas,monospace;max-height:280px;overflow:auto;margin-top:14px}.check{display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.5;margin:12px 0}.check input{margin-top:3px}.pill{font-size:12px;font-weight:700;color:#254c91;background:#edf3ff;border-radius:20px;padding:5px 9px}@media(max-width:720px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}.top{gap:12px;align-items:flex-start;flex-direction:column}}
+</style></head>
+<body>
+<header class="top"><div><h1>Invest N Gain Realty</h1><small>WhatsApp Campaign Dashboard</small></div><span class="pill">Template: demo · English</span></header>
+<main class="wrap">
+<section class="card">
+<h2>Secure admin access</h2><p class="muted">Apna Admin API Key ek baar enter karke Save karein. Key sirf is browser mein save hogi; ise kisi ke saath share na karein.</p>
+<div class="row"><div style="flex:1;min-width:230px"><input id="key" type="password" autocomplete="off" placeholder="Admin API Key"></div><button id="saveKey">Save key</button><button class="secondary" id="check">Check WhatsApp connection</button><span id="connection" class="status">Not checked</span></div>
+</section>
+<div class="grid" style="margin-top:18px">
+<section class="card">
+<h2>1. Send a test message</h2><p class="muted">Pehle ek opted-in test contact par demo template verify karein.</p>
+<div class="field"><label for="testPhone">Recipient phone (country code ke saath)</label><input id="testPhone" type="tel" placeholder="919XXXXXXXXX"></div>
+<button id="sendTest">Send test message</button>
+<div class="muted" style="margin-top:10px">Test contact Supabase mein opted-in hona chahiye aur follow-up stopped/replied nahi hona chahiye.</div>
+</section>
+<section class="card">
+<h2>2. Prepare campaign CSV</h2><p class="muted">CSV mein do columns hone chahiye: <b>phone</b> aur <b>consent</b>. Consent values yes / true / 1 honi chahiye.</p>
+<button class="secondary" id="downloadCsv">Download CSV sample</button>
+<div class="notice">Maximum 100 contacts per upload. Duplicate, invalid, non-consenting, missing ya ineligible leads automatically skip honge.</div>
+</section>
+<section class="card wide">
+<h2>3. Upload and send campaign</h2><div class="row"><span class="pill">Selected template: demo</span><span class="status">Marketing · English</span></div>
+<div class="field"><label for="csv">Choose CSV file</label><input id="csv" type="file" accept=".csv,text/csv"></div>
+<div id="fileInfo" class="muted">No file selected.</div>
+<label class="check"><input type="checkbox" id="consentConfirm"><span>I confirm that these contacts have explicitly opted in to receive WhatsApp messages from Invest N Gain Realty, and the campaign content matches the selected template category.</span></label>
+<label class="check"><input type="checkbox" id="sendConfirm"><span>I understand this action sends real WhatsApp messages and Meta may charge for delivered messages.</span></label>
+<button id="sendBulk" disabled>Upload &amp; send campaign</button>
+<div class="notice">Bulk sending also requires the backend safety switch <b>ENABLE_BULK_SENDING=true</b>. If it is off, the app will show that bulk sending is disabled; no messages will be sent.</div>
+</section>
+<section class="card wide">
+<h2>Campaign result</h2><p class="muted">API response, accepted, failed and skipped counts yahan dikhenge. Meta acceptance delivery confirmation nahi hoti.</p><div id="result" class="result">Waiting for an action…</div>
+</section>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const keyInput=$('key'), saved=localStorage.getItem('ing_admin_key')||'';
+keyInput.value=saved;
+function apiHeaders(json=false){const h={'x-admin-key':keyInput.value.trim()};if(json)h['Content-Type']='application/json';return h}
+function show(value){$('result').textContent=typeof value==='string'?value:JSON.stringify(value,null,2)}
+$('saveKey').onclick=()=>{const k=keyInput.value.trim();if(!k){show('Admin API Key enter karein.');return}localStorage.setItem('ing_admin_key',k);show('Admin key saved in this browser.');};
+$('check').onclick=async()=>{try{const r=await fetch('/admin/whatsapp-connection-check',{headers:apiHeaders()});const d=await r.json();$('connection').textContent=d.ok?'WhatsApp connected':'Connection failed';$('connection').className='status '+(d.ok?'ok':'bad');show(d)}catch(e){show('Connection check failed: '+e.message)}};
+$('sendTest').onclick=async()=>{const recipient=$('testPhone').value.trim();if(!recipient){show('Test recipient number enter karein.');return}if(!confirm('Send demo template to '+recipient+'?'))return;$('sendTest').disabled=true;try{const r=await fetch('/send-template',{method:'POST',headers:apiHeaders(true),body:JSON.stringify({recipient})});const d=await r.json();show({httpStatus:r.status,response:d})}catch(e){show('Request failed: '+e.message)}finally{$('sendTest').disabled=false}};
+$('downloadCsv').onclick=()=>{const blob=new Blob(['phone,consent\n919XXXXXXXXX,yes\n'],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='investngain_whatsapp_campaign.csv';a.click();URL.revokeObjectURL(a.href)};
+$('csv').onchange=()=>{const f=$('csv').files[0];$('fileInfo').textContent=f?f.name+' · '+Math.ceil(f.size/1024)+' KB · '+(f.size<=1048576?'Within 1 MB limit':'File too large'):'No file selected.';$('sendBulk').disabled=!f||f.size>1048576};
+$('sendBulk').onclick=async()=>{const f=$('csv').files[0];if(!f||!$('consentConfirm').checked||!$('sendConfirm').checked){show('CSV select karein aur dono confirmations tick karein.');return}if(!confirm('Campaign CSV upload karke eligible contacts ko demo template bhejna hai?'))return;const fd=new FormData();fd.append('file',f);$('sendBulk').disabled=true;$('sendBulk').textContent='Sending…';try{const r=await fetch('/bulk-template',{method:'POST',headers:apiHeaders(),body:fd});const d=await r.json();show({httpStatus:r.status,response:d})}catch(e){show('Upload failed: '+e.message)}finally{$('sendBulk').textContent='Upload & send campaign';$('sendBulk').disabled=false}};
+</script></body></html>
