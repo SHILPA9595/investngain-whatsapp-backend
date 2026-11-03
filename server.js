@@ -27,7 +27,7 @@ const ENABLE_AUTO_FOLLOWUP =
   process.env.ENABLE_AUTO_FOLLOWUP === 'true';
 
 const TEMPLATE_LANGUAGE = 'en';
-const TEMPLATE_NAME = 'property_update_investngain';
+const TEMPLATE_NAME = 'demo_investngain';
 
 const MAX_RECIPIENTS = 100;
 const FOLLOWUP_BATCH_LIMIT = 10;
