@@ -27,7 +27,7 @@ const ENABLE_AUTO_FOLLOWUP =
   process.env.ENABLE_AUTO_FOLLOWUP === 'true';
 
 const TEMPLATE_LANGUAGE = 'en';
-const TEMPLATE_NAME = 'demo_investngain';
+const TEMPLATE_NAME = 'investngain_govardhan_puja_greeting';
 
 const MAX_RECIPIENTS = 100;
 const FOLLOWUP_BATCH_LIMIT = 10;
@@ -429,6 +429,7 @@ async function sendTemplate(
     'hello_world',
     'property_update_investngain',
     'demo_investngain',
+    'investngain_govardhan_puja_greeting',
     'lead_followup_test',
     'new_utility_temp',
     'utility_by_harsh',
