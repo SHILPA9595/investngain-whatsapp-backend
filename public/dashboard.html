@@ -23,7 +23,7 @@
 <section class="card">
 <h2>2. Prepare campaign CSV</h2><p class="muted">CSV mein do columns hone chahiye: <b>phone</b> aur <b>consent</b>. Consent values yes / true / 1 honi chahiye.</p>
 <button class="secondary" id="downloadCsv">Download CSV sample</button>
-<div class="notice">Maximum 100 contacts per upload. Duplicate, invalid, non-consenting, missing ya ineligible leads automatically skip honge.</div>
+<div class="notice">Maximum 200 contacts per upload. Duplicate, invalid, non-consenting, missing ya ineligible leads automatically skip honge.</div>
 </section>
 <section class="card wide">
 <h2>3. Import contacts to Supabase</h2>
@@ -31,7 +31,7 @@
 <div class="field"><label for="importCsv">Choose contacts CSV</label><input id="importCsv" type="file" accept=".csv,text/csv"></div>
 <label class="check"><input type="checkbox" id="importConsent"><span>I confirm that every row marked yes / true / 1 has explicitly agreed to receive WhatsApp messages from Invest N Gain Realty.</span></label>
 <button id="importContacts" disabled>Import contacts to Supabase</button>
-<div class="notice">Maximum 100 rows per upload. New opted-in contacts are added. Existing numbers are not overwritten, so STOP/replied contacts stay protected. Import does not send messages.</div>
+<div class="notice">Maximum 200 rows per upload. New opted-in contacts are added. Existing numbers are not overwritten, so STOP/replied contacts stay protected. Import does not send messages.</div>
 </section>
 <section class="card wide">
 <h2>4. Upload and send campaign</h2><div class="row"><span class="pill">Selected template: demo</span><span class="status">Marketing · English</span></div>
