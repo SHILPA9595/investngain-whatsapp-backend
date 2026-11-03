@@ -488,9 +488,7 @@ async function sendTemplate(
 // --------------------------------------------------
 
 app.get('/', (req, res) => {
-  res.send(
-    'Invest N Gain WhatsApp Backend is running!'
-  );
+  res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html'));
 });
 
 // --------------------------------------------------
