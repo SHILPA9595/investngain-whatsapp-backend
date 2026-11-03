@@ -428,6 +428,7 @@ async function sendTemplate(
     '_investngain_day7_followup',
     'hello_world',
     'property_update_investngain',
+    'demo_investngain',
     'lead_followup_test',
     'new_utility_temp',
     'utility_by_harsh',
