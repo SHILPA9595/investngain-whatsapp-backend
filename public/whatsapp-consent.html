@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WhatsApp Updates | Invest N Gain Realty</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f9;color:#172033;font-family:Arial, sans-serif}.wrap{max-width:620px;margin:36px auto;padding:18px}.card{background:#fff;border:1px solid #e1e6ef;border-radius:16px;padding:26px;box-shadow:0 8px 28px #18274412}.brand{background:#111b31;color:#fff;padding:22px;border-radius:12px;margin:-2px -2px 22px}.brand h1{font-size:21px;margin:0 0 5px}.brand p{color:#c4cde0;margin:0;font-size:13px}.intro{color:#58657a;line-height:1.55;font-size:14px}.field{margin:18px 0}.field label{display:block;font-size:14px;font-weight:700;margin-bottom:8px}.field input{width:100%;padding:13px;border:1px solid #ccd4e1;border-radius:9px;font-size:16px}.lang{display:flex;gap:18px;margin:18px 0;font-size:14px}.consent{display:flex;gap:11px;align-items:flex-start;line-height:1.55;font-size:14px;padding:14px;background:#f5f7fb;border-radius:10px}.consent input{margin-top:4px;width:18px;height:18px;flex-shrink:0}button{width:100%;border:0;border-radius:9px;padding:14px;background:#1e5bd7;color:white;font-size:16px;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.fine{font-size:12px;color:#68758b;line-height:1.5;margin-top:16px}.status{margin-top:15px;font-size:14px;line-height:1.5}.ok{color:#176b3a}.bad{color:#a62a22}@media(max-width:600px){.wrap{margin:12px auto}.card{padding:20px}}
+</style>
+</head>
+<body><main class="wrap"><section class="card">
+<header class="brand"><h1>Invest N Gain Realty</h1><p>Under Promise Over Delivery</p></header>
+<h2>Get WhatsApp Updates</h2>
+<p class="intro">Stay informed about property updates, new launches, offers and festive greetings. Please share your details and choose whether you agree to receive WhatsApp messages.</p>
+<form id="consentForm">
+<div class="field"><label for="name">Your name / आपका नाम</label><input id="name" name="name" maxlength="120" autocomplete="name" required placeholder="Enter your name / अपना नाम लिखें"></div>
+<div class="field"><label for="phone">WhatsApp mobile number with country code / country code सहित मोबाइल नंबर</label><input id="phone" name="phone" type="tel" inputmode="tel" required placeholder="e.g. 919XXXXXXXXX"></div>
+<div class="lang"><label><input type="radio" name="language" value="en" checked> English</label><label><input type="radio" name="language" value="hi"> हिंदी</label></div>
+<label class="consent"><input id="consent" type="checkbox" required><span><strong>English:</strong> I agree to receive WhatsApp property updates, new launches, offers and festive greetings from Invest N Gain Realty. I can opt out anytime by replying STOP.<br><br><strong>हिंदी:</strong> मैं Invest N Gain Realty से प्रॉपर्टी अपडेट्स, नए लॉन्च, ऑफर्स और त्योहारों की शुभकामनाएँ WhatsApp पर प्राप्त करने के लिए सहमत हूँ। मैं कभी भी STOP लिखकर संदेश बंद कर सकता/सकती हूँ।</span></label>
+<p class="fine">Consent is optional and the checkbox is not pre-selected. Your number will be used for the WhatsApp updates described above. You can opt out at any time by replying STOP.</p>
+<button id="submit" type="submit">I Agree & Submit / सहमत हूँ और सबमिट करें</button>
+<div id="status" class="status" role="status" aria-live="polite"></div>
+</form></section></main>
+<script>
+const form=document.getElementById('consentForm'),button=document.getElementById('submit'),statusBox=document.getElementById('status');
+form.addEventListener('submit',async event=>{
+ event.preventDefault();
+ if(!document.getElementById('consent').checked){statusBox.className='status bad';statusBox.textContent='Please tick the consent box to continue. / कृपया सहमति बॉक्स चुनें।';return;}
+ const body={name:document.getElementById('name').value.trim(),phone:document.getElementById('phone').value.trim(),consent:true,language:form.querySelector('input[name="language"]:checked').value};
+ button.disabled=true;button.textContent='Submitting… / सबमिट हो रहा है…';statusBox.textContent='';
+ try{
+  const response=await fetch('/whatsapp-consent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const data=await response.json();
+  if(!response.ok||!data.ok)throw new Error(data.error||'Submission failed');
+  statusBox.className='status ok';statusBox.textContent='Thank you! Your consent has been recorded. / धन्यवाद! आपकी सहमति दर्ज हो गई है।';form.reset();
+ }catch(error){statusBox.className='status bad';statusBox.textContent=error.message+' / कृपया कुछ देर बाद दोबारा कोशिश करें।';}
+ finally{button.disabled=false;button.textContent='I Agree & Submit / सहमत हूँ और सबमिट करें';}
+});
+</script></body></html>
