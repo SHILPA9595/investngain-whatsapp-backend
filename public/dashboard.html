@@ -10,6 +10,7 @@
 <header class="top"><div><h1>Invest N Gain Realty</h1><small>WhatsApp Campaign Dashboard</small></div><label for="templateSelect" class="pill">WhatsApp template
 <select id="templateSelect" aria-label="WhatsApp template" style="margin-left:8px;border:1px solid #cbd5e1;border-radius:6px;padding:5px;background:white;color:#172033;font:inherit">
 <option value="property_update_investngain">property_update_investngain · English</option>
+<option value="new_temp">new_temp · English</option>
 </select></label></header>
 <main class="wrap">
 <section class="card">
@@ -52,6 +53,7 @@
 </main>
 <script>
 const $=id=>document.getElementById(id);
+$('templateSelect').onchange=()=>{$('campaignTemplateLabel').textContent=$('templateSelect').value};
 const keyInput=$('key'), saved=localStorage.getItem('ing_admin_key')||'';
 keyInput.value=saved;
 function apiHeaders(json=false){const h={'x-admin-key':keyInput.value.trim()};if(json)h['Content-Type']='application/json';return h}
@@ -63,5 +65,5 @@ $('downloadCsv').onclick=()=>{const blob=new Blob(['phone,consent\n919XXXXXXXXX,
 $('csv').onchange=()=>{const f=$('csv').files[0];$('fileInfo').textContent=f?f.name+' · '+Math.ceil(f.size/1024)+' KB · '+(f.size<=1048576?'Within 1 MB limit':'File too large'):'No file selected.';$('sendBulk').disabled=!f||f.size>1048576};
 $('importCsv').onchange=()=>{const f=$('importCsv').files[0];$('importContacts').disabled=!f||f.size>1048576};
 $('importContacts').onclick=async()=>{const f=$('importCsv').files[0];if(!f||!$('importConsent').checked){show('CSV select karein aur consent confirmation tick karein.');return}if(!confirm('CSV contacts ko Supabase mein import karna hai? Is action se WhatsApp messages send nahi honge.'))return;const fd=new FormData();fd.append('file',f);$('importContacts').disabled=true;$('importContacts').textContent='Importing…';try{const r=await fetch('/import-leads',{method:'POST',headers:apiHeaders(),body:fd});const d=await r.json();show({httpStatus:r.status,response:d})}catch(e){show('Import failed: '+e.message)}finally{$('importContacts').textContent='Import contacts to Supabase';$('importContacts').disabled=!$('importCsv').files[0]||$('importCsv').files[0].size>1048576}};
-$('sendBulk').onclick=async()=>{const f=$('csv').files[0];if(!f||!$('consentConfirm').checked||!$('sendConfirm').checked){show('CSV select karein aur dono confirmations tick karein.');return}if(!confirm('Campaign CSV upload karke eligible contacts ko demo template bhejna hai?'))return;const fd=new FormData();fd.append('file',f);fd.append('templateName',$('templateSelect').value);$('sendBulk').disabled=true;$('sendBulk').textContent='Sending…';try{const r=await fetch('/bulk-template',{method:'POST',headers:apiHeaders(),body:fd});const d=await r.json();show({httpStatus:r.status,response:d})}catch(e){show('Upload failed: '+e.message)}finally{$('sendBulk').textContent='Upload & send campaign';$('sendBulk').disabled=false}};
+$('sendBulk').onclick=async()=>{const f=$('csv').files[0];if(!f||!$('consentConfirm').checked||!$('sendConfirm').checked){show('CSV select karein aur dono confirmations tick karein.');return}if(!confirm('Campaign CSV upload karke eligible contacts ko selected template bhejna hai?'))return;const fd=new FormData();fd.append('file',f);fd.append('templateName',$('templateSelect').value);$('sendBulk').disabled=true;$('sendBulk').textContent='Sending…';try{const r=await fetch('/bulk-template',{method:'POST',headers:apiHeaders(),body:fd});const d=await r.json();show({httpStatus:r.status,response:d})}catch(e){show('Upload failed: '+e.message)}finally{$('sendBulk').textContent='Upload & send campaign';$('sendBulk').disabled=false}};
 </script></body></html>
