@@ -490,6 +490,79 @@ async function sendTemplate(
 app.get('/', (req, res) => {
   res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html'));
 });
+app.get('/whatsapp-consent', (req, res) => {
+  res.sendFile(require('path').join(__dirname, 'public', 'whatsapp-consent.html'));
+});
+
+app.post('/whatsapp-consent', async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim().slice(0, 120);
+    const phone = normalizePhone(req.body?.phone);
+    const consent = req.body?.consent === true;
+    const language = req.body?.language === 'hi' ? 'hi' : 'en';
+
+    if (!name || !validPhone(phone) || !consent) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Name, valid WhatsApp number and explicit consent are required.'
+      });
+    }
+
+    requireSupabaseConfig();
+
+    const consentText = language === 'hi'
+      ? 'मैं Invest N Gain Realty से प्रॉपर्टी अपडेट्स, नए लॉन्च, ऑफर्स और त्योहारों की शुभकामनाएँ WhatsApp पर प्राप्त करने के लिए सहमत हूँ। मैं कभी भी STOP लिखकर संदेश बंद कर सकता/सकती हूँ।'
+      : 'I agree to receive WhatsApp property updates, new launches, offers and festive greetings from Invest N Gain Realty. I can opt out anytime by replying STOP.';
+
+    await axios.post(
+      dbUrl('whatsapp_consent_events'),
+      {
+        name,
+        phone,
+        consent_text: consentText,
+        consent_language: language,
+        consent_source: 'public_whatsapp_consent_form',
+        consent_given: true,
+        consent_recorded_at: now()
+      },
+      {
+        headers: supabaseHeaders({ Prefer: 'return=minimal' }),
+        timeout: 10000
+      }
+    );
+
+    await axios.post(
+      `${leadsUrl()}?on_conflict=phone`,
+      {
+        phone,
+        whatsapp_opt_in: true,
+        consent_recorded_at: now(),
+        stop_followup: false,
+        last_reply_at: null,
+        last_message_type: null,
+        updated_at: now()
+      },
+      {
+        headers: supabaseHeaders({
+          Prefer: 'resolution=merge-duplicates,return=minimal'
+        }),
+        timeout: 10000
+      }
+    );
+
+    return res.status(200).json({
+      ok: true,
+      message: 'Thank you. Your WhatsApp consent has been recorded.'
+    });
+  } catch (error) {
+    console.error('WhatsApp consent form error:', errorDetails(error));
+    return res.status(500).json({
+      ok: false,
+      error: 'We could not save your consent right now. Please try again later.'
+    });
+  }
+});
+
 
 // --------------------------------------------------
 // ADMIN: WHATSAPP CONNECTION CHECK
