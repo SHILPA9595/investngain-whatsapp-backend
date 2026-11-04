@@ -40,6 +40,7 @@ const ALLOWED_TEMPLATES = [
   'max_senior_living',
   'lead_followup_test',
   'new_utility_temp',
+  'new_temp',
   'utility_by_harsh',
   'by_harsh_2'
 ];
