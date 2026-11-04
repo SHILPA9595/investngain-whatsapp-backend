@@ -189,6 +189,8 @@ function dbUrl(path) {
 
 const leadsUrl = () => dbUrl('whatsapp_leads');
 const jobsUrl = () => dbUrl('whatsapp_followup_jobs');
+const campaignsUrl = () => dbUrl('whatsapp_campaigns');
+const campaignMessagesUrl = () => dbUrl('whatsapp_campaign_messages');
 
 async function rpc(name, data) {
   const response = await axios.post(
@@ -725,6 +727,28 @@ app.post(
             });
 
            
+const campaignMessage = await readOne(campaignMessagesUrl(), {
+  meta_message_id: `eq.${messageId}`,
+  select: 'id,status'
+});
+if (campaignMessage) {
+  const rank = { accepted: 0, sent: 1, delivered: 2, read: 3, failed: 1 };
+  const previous = campaignMessage.status || 'accepted';
+  const next = status.status;
+  const canAdvance = (rank[next] ?? 0) >= (rank[previous] ?? 0)
+    && !(previous === 'failed' && next !== 'failed')
+    && !(next === 'failed' && ['delivered', 'read'].includes(previous));
+  if (canAdvance) {
+    await axios.patch(campaignMessagesUrl(), {
+      status: next, updated_at: now(),
+      error: next === 'failed' ? JSON.stringify(status.errors || []).slice(0, 1000) : null
+    }, {
+      params: { id: `eq.${campaignMessage.id}` },
+      headers: supabaseHeaders({ Prefer: 'return=minimal' }), timeout: 10000
+    });
+  }
+}
+
 const matching = await readOne(
   jobsUrl(),
   {
@@ -1116,10 +1140,20 @@ app.post(
     }
 
     const results = [];
-
+    let campaignId;
     try {
       requireWhatsAppConfig();
       requireSupabaseConfig();
+      const created = await axios.post(campaignsUrl(), {
+        template_name: templateName,
+        total_recipients: recipients.length + skipped,
+        accepted: 0, delivered: 0, read_count: 0, failed: 0, skipped,
+        created_at: now()
+      }, {
+        headers: supabaseHeaders({ Prefer: 'return=representation' }), timeout: 10000
+      });
+      campaignId = created.data?.[0]?.id;
+      if (!campaignId) throw new Error('Supabase did not return a campaign ID.');
 
     } catch (error) {
       return res.status(503).json({
@@ -1132,45 +1166,48 @@ app.post(
         const lead = await readLeadByPhone(phone);
 
         if (!lead || !eligibleLead(lead)) {
-          results.push({
-            recipient: phone,
-            status: 'skipped',
-            reason:
-              'Lead missing, no opt-in, or already replied'
-          });
-
+          results.push({ recipient: phone, status: 'skipped', reason: 'Lead missing, no opt-in, or already replied' });
           skipped++;
+          await axios.post(campaignMessagesUrl(), {
+            campaign_id: campaignId, phone, status: 'skipped', updated_at: now()
+          }, { headers: supabaseHeaders({ Prefer: 'return=minimal' }), timeout: 10000 });
           continue;
         }
 
         const response = await sendTemplate(phone, templateName);
 
-        results.push({
-          recipient: phone,
-          status: 'accepted',
-          messageId:
-            response.data?.messages?.[0]?.id || null
-        });
+        const messageId = response.data?.messages?.[0]?.id || null;
+        results.push({ recipient: phone, status: 'accepted', messageId });
+        await axios.post(campaignMessagesUrl(), {
+          campaign_id: campaignId, phone, meta_message_id: messageId, status: 'accepted', updated_at: now()
+        }, { headers: supabaseHeaders({ Prefer: 'return=minimal' }), timeout: 10000 });
 
       } catch (error) {
-        results.push({
-          recipient: phone,
-          status: 'failed',
-          error: errorText(error)
-        });
+        const messageError = errorText(error);
+        results.push({ recipient: phone, status: 'failed', error: messageError });
+        await axios.post(campaignMessagesUrl(), {
+          campaign_id: campaignId, phone, status: 'failed', error: messageError, updated_at: now()
+        }, { headers: supabaseHeaders({ Prefer: 'return=minimal' }), timeout: 10000 });
       }
 
       await sleep(1000);
     }
 
+    const acceptedCount = results.filter(item => item.status === 'accepted').length;
+    const failedCount = results.filter(item => item.status === 'failed').length;
+    const skippedInResults = results.filter(item => item.status === 'skipped').length;
+    await axios.patch(campaignsUrl(), {
+      total_recipients: results.length + Math.max(0, skipped - skippedInResults),
+      accepted: acceptedCount, failed: failedCount, skipped
+    }, {
+      params: { id: `eq.${campaignId}` },
+      headers: supabaseHeaders({ Prefer: 'return=minimal' }), timeout: 10000
+    });
     return res.json({
+      campaignId,
       totalProcessed: results.length,
-      acceptedByMeta: results.filter(
-        item => item.status === 'accepted'
-      ).length,
-      failed: results.filter(
-        item => item.status === 'failed'
-      ).length,
+      acceptedByMeta: acceptedCount,
+      failed: failedCount,
       skipped,
       note:
         'Meta acceptance does not guarantee delivery.',
@@ -1178,6 +1215,32 @@ app.post(
     });
   }
 );
+
+
+app.get('/campaign-history', requireAdmin, async (req, res) => {
+  try {
+    requireSupabaseConfig();
+    const response = await axios.get(campaignsUrl(), {
+      params: { select: '*', order: 'created_at.desc', limit: 100 },
+      headers: supabaseHeaders(), timeout: 10000
+    });
+    const output = await Promise.all((response.data || []).map(async campaign => {
+      const detail = await axios.get(campaignMessagesUrl(), {
+        params: { select: 'status', campaign_id: 'eq.' + campaign.id, limit: 1000 },
+        headers: supabaseHeaders(), timeout: 10000
+      });
+      const counts = { accepted: 0, sent: 0, delivered: 0, read: 0, failed: 0, skipped: 0 };
+      for (const item of detail.data || []) {
+        if (Object.prototype.hasOwnProperty.call(counts, item.status)) counts[item.status]++;
+      }
+      return { ...campaign, ...counts };
+    }));
+    return res.json({ campaigns: output });
+  } catch (error) {
+    console.error('Campaign history:', errorDetails(error));
+    return res.status(500).json({ error: errorText(error) });
+  }
+});
 
 // --------------------------------------------------
 // IMPORT LEADS FROM CSV
