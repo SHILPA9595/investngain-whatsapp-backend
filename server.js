@@ -27,7 +27,22 @@ const ENABLE_AUTO_FOLLOWUP =
   process.env.ENABLE_AUTO_FOLLOWUP === 'true';
 
 const TEMPLATE_LANGUAGE = 'en';
-const TEMPLATE_NAME = 'demo';
+const TEMPLATE_NAME = 'property_update_investngain';
+const ALLOWED_TEMPLATES = [
+  'investngain_day1_followup',
+  'investngain_day3_followup',
+  '_investngain_day7_followup',
+  'hello_world',
+  'property_update_investngain',
+  'demo_investngain',
+  'demo',
+  'investngain_govardhan_puja_greeting',
+  'max_senior_living',
+  'lead_followup_test',
+  'new_utility_temp',
+  'utility_by_harsh',
+  'by_harsh_2'
+];
 
 const MAX_RECIPIENTS = 200;
 const FOLLOWUP_BATCH_LIMIT = 10;
@@ -422,23 +437,7 @@ async function sendTemplate(
 ) {
   requireWhatsAppConfig();
 
-  const allowedTemplates = [
-    'investngain_day1_followup',
-    'investngain_day3_followup',
-    '_investngain_day7_followup',
-    'hello_world',
-    'property_update_investngain',
-    'demo_investngain',
-    'demo',
-    'investngain_govardhan_puja_greeting',
-    'max_senior_living',
-    'lead_followup_test',
-    'new_utility_temp',
-    'utility_by_harsh',
-    'by_harsh_2'
-  ];
-
-  if (!allowedTemplates.includes(templateName)) {
+  if (!ALLOWED_TEMPLATES.includes(templateName)) {
     throw new Error('Template is not allowed.');
   }
 
@@ -958,7 +957,17 @@ app.post(
         });
       }
 
-      const response = await sendTemplate(phone);
+      const templateName = String(
+        req.body?.templateName || TEMPLATE_NAME
+      );
+
+      if (!ALLOWED_TEMPLATES.includes(templateName)) {
+        return res.status(400).json({
+          error: 'Template is not in the approved dashboard allow-list.'
+        });
+      }
+
+      const response = await sendTemplate(phone, templateName);
 
       return res.json(response.data);
 
@@ -988,6 +997,16 @@ app.post(
     if (!ENABLE_BULK_SENDING) {
       return res.status(403).json({
         error: 'Bulk sending is disabled in Render.'
+      });
+    }
+
+    const templateName = String(
+      req.body?.templateName || TEMPLATE_NAME
+    );
+
+    if (!ALLOWED_TEMPLATES.includes(templateName)) {
+      return res.status(400).json({
+        error: 'Template is not in the approved dashboard allow-list.'
       });
     }
 
@@ -1118,7 +1137,7 @@ app.post(
           continue;
         }
 
-        const response = await sendTemplate(phone);
+        const response = await sendTemplate(phone, templateName);
 
         results.push({
           recipient: phone,
