@@ -52,6 +52,13 @@
 <button id="sendBulk" disabled>Upload &amp; send campaign</button>
 <div class="notice">Bulk sending also requires the backend safety switch <b>ENABLE_BULK_SENDING=true</b>. If it is off, the app will show that bulk sending is disabled; no messages will be sent.</div>
 </section>
+
+<section class="card wide" id="campaignHistoryCard">
+<h2>5. Campaign history</h2>
+<p class="muted">Recent bulk campaigns and their latest WhatsApp delivery statuses.</p>
+<div class="row" style="margin:10px 0"><button class="secondary" id="refreshHistory">Refresh history</button><span class="muted" id="historyStatus">Not loaded yet.</span></div>
+<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;background:#f3f6fb"><th style="padding:10px">Date</th><th style="padding:10px">Template</th><th style="padding:10px">Total</th><th style="padding:10px">Accepted</th><th style="padding:10px">Delivered</th><th style="padding:10px">Read</th><th style="padding:10px">Failed</th><th style="padding:10px">Skipped</th></tr></thead><tbody id="historyRows"><tr><td colspan="8" style="padding:12px;color:#68758b">Save your admin key, then refresh history.</td></tr></tbody></table></div>
+</section>
 <section class="card wide">
 <h2>Campaign result</h2><p class="muted">API response, accepted, failed and skipped counts yahan dikhenge. Meta acceptance delivery confirmation nahi hoti.</p><div id="result" class="result">Waiting for an action…</div>
 </section>
@@ -64,12 +71,41 @@ const keyInput=$('key'), saved=localStorage.getItem('ing_admin_key')||'';
 keyInput.value=saved;
 function apiHeaders(json=false){const h={'x-admin-key':keyInput.value.trim()};if(json)h['Content-Type']='application/json';return h}
 function show(value){$('result').textContent=typeof value==='string'?value:JSON.stringify(value,null,2)}
-$('saveKey').onclick=()=>{const k=keyInput.value.trim();if(!k){show('Admin API Key enter karein.');return}localStorage.setItem('ing_admin_key',k);show('Admin key saved in this browser.');};
+
+async function loadCampaignHistory(){
+  $('historyStatus').textContent='Loading…';
+  try{
+    const r=await fetch('/campaign-history',{headers:apiHeaders()});
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||'Could not load campaign history.');
+    const rows=data.campaigns||[];
+    $('historyRows').innerHTML=rows.length?rows.map(c=>{
+      const date=c.created_at?new Date(c.created_at).toLocaleString():'—';
+      const total=Number(c.total_recipients||0);
+      return '<tr style="border-top:1px solid #e2e7f0">'+
+        '<td style="padding:10px">'+date+'</td>'+
+        '<td style="padding:10px">'+escapeHtml(c.template_name||'—')+'</td>'+
+        '<td style="padding:10px">'+total+'</td>'+
+        '<td style="padding:10px">'+(Number(c.accepted||0)+Number(c.sent||0))+'</td>'+
+        '<td style="padding:10px">'+Number(c.delivered||0)+'</td>'+
+        '<td style="padding:10px">'+Number(c.read||0)+'</td>'+
+        '<td style="padding:10px">'+Number(c.failed||0)+'</td>'+
+        '<td style="padding:10px">'+Number(c.skipped||0)+'</td></tr>';
+    }).join(''):'<tr><td colspan="8" style="padding:12px;color:#68758b">No campaigns recorded yet. New bulk sends will appear here.</td></tr>';
+    $('historyStatus').textContent=rows.length+' campaign(s) · Updated '+new Date().toLocaleTimeString();
+  }catch(e){$('historyStatus').textContent='Could not load: '+e.message;}
+}
+function escapeHtml(value){
+  return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+$('refreshHistory').onclick=loadCampaignHistory;
+
+$('saveKey').onclick=()=>{const k=keyInput.value.trim();if(!k){show('Admin API Key enter karein.');return}localStorage.setItem('ing_admin_key',k);show('Admin key saved in this browser.');loadCampaignHistory();};
 $('check').onclick=async()=>{try{const r=await fetch('/admin/whatsapp-connection-check',{headers:apiHeaders()});const d=await r.json();$('connection').textContent=d.ok?'WhatsApp connected':'Connection failed';$('connection').className='status '+(d.ok?'ok':'bad');show(d)}catch(e){show('Connection check failed: '+e.message)}};
 $('sendTest').onclick=async()=>{const recipient=$('testPhone').value.trim();if(!recipient){show('Test recipient number enter karein.');return}if(!confirm('Send '+$('templateSelect').value+' to '+recipient+'?'))return;$('sendTest').disabled=true;try{const r=await fetch('/send-template',{method:'POST',headers:apiHeaders(true),body:JSON.stringify({recipient,templateName:$('templateSelect').value})});const d=await r.json();show({httpStatus:r.status,response:d})}catch(e){show('Request failed: '+e.message)}finally{$('sendTest').disabled=false}};
 $('downloadCsv').onclick=()=>{const blob=new Blob(['phone,consent\n919XXXXXXXXX,yes\n'],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='investngain_whatsapp_campaign.csv';a.click();URL.revokeObjectURL(a.href)};
 $('csv').onchange=()=>{const f=$('csv').files[0];$('fileInfo').textContent=f?f.name+' · '+Math.ceil(f.size/1024)+' KB · '+(f.size<=1048576?'Within 1 MB limit':'File too large'):'No file selected.';$('sendBulk').disabled=!f||f.size>1048576};
 $('importCsv').onchange=()=>{const f=$('importCsv').files[0];$('importContacts').disabled=!f||f.size>1048576};
 $('importContacts').onclick=async()=>{const f=$('importCsv').files[0];if(!f||!$('importConsent').checked){show('CSV select karein aur consent confirmation tick karein.');return}if(!confirm('CSV contacts ko Supabase mein import karna hai? Is action se WhatsApp messages send nahi honge.'))return;const fd=new FormData();fd.append('file',f);$('importContacts').disabled=true;$('importContacts').textContent='Importing…';try{const r=await fetch('/import-leads',{method:'POST',headers:apiHeaders(),body:fd});const d=await r.json();show({httpStatus:r.status,response:d})}catch(e){show('Import failed: '+e.message)}finally{$('importContacts').textContent='Import contacts to Supabase';$('importContacts').disabled=!$('importCsv').files[0]||$('importCsv').files[0].size>1048576}};
-$('sendBulk').onclick=async()=>{const f=$('csv').files[0];if(!f||!$('consentConfirm').checked||!$('sendConfirm').checked){show('CSV select karein aur dono confirmations tick karein.');return}if(!confirm('Campaign CSV upload karke eligible contacts ko selected template bhejna hai?'))return;const fd=new FormData();fd.append('file',f);fd.append('templateName',$('templateSelect').value);$('sendBulk').disabled=true;$('sendBulk').textContent='Sending…';try{const r=await fetch('/bulk-template',{method:'POST',headers:apiHeaders(),body:fd});const d=await r.json();show({httpStatus:r.status,response:d})}catch(e){show('Upload failed: '+e.message)}finally{$('sendBulk').textContent='Upload & send campaign';$('sendBulk').disabled=false}};
+$('sendBulk').onclick=async()=>{const f=$('csv').files[0];if(!f||!$('consentConfirm').checked||!$('sendConfirm').checked){show('CSV select karein aur dono confirmations tick karein.');return}if(!confirm('Campaign CSV upload karke eligible contacts ko selected template bhejna hai?'))return;const fd=new FormData();fd.append('file',f);fd.append('templateName',$('templateSelect').value);$('sendBulk').disabled=true;$('sendBulk').textContent='Sending…';try{const r=await fetch('/bulk-template',{method:'POST',headers:apiHeaders(),body:fd});const d=await r.json();show({httpStatus:r.status,response:d});if(r.ok)loadCampaignHistory()}catch(e){show('Upload failed: '+e.message)}finally{$('sendBulk').textContent='Upload & send campaign';$('sendBulk').disabled=false}};
 </script></body></html>
