@@ -46,7 +46,8 @@ const ALLOWED_TEMPLATES = [
   'new_utility_temp',
   'new_temp',
   'utility_by_harsh',
-  'by_harsh_2'
+  'by_harsh_2' ,
+   '4_to_one_'
 ];
 
 const MAX_RECIPIENTS = 200;
