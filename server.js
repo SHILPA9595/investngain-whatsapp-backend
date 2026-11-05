@@ -37,6 +37,7 @@ const ALLOWED_TEMPLATES = [
   'demo_investngain',
   'demo',
   'investngain_govardhan_puja_greeting',
+  'daily_real_estate_inspiration',
   'investngain_diwali_greeting',
   'investngain_chotidiwali_greeting',
   'investngain_dhanteras_greeting',
