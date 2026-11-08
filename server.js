@@ -457,6 +457,30 @@ async function sendTemplate(
     }
   };
 
+  if (templateName === 'investngain_diwali_greeting') {
+    const imageUrl = String(process.env.DIWALI_HEADER_IMAGE_URL || '').trim();
+
+    if (!/^https:\/\//i.test(imageUrl)) {
+      throw new Error(
+        'DIWALI_HEADER_IMAGE_URL must be set to a public HTTPS image URL in Render.'
+      );
+    }
+
+    template.components = [
+      {
+        type: 'header',
+        parameters: [
+          {
+            type: 'image',
+            image: {
+              link: imageUrl
+            }
+          }
+        ]
+      }
+    ];
+  }
+
   if (templateName === 'by_harsh_2') {
     template.components = [
       {
