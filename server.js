@@ -481,6 +481,30 @@ async function sendTemplate(
     ];
   }
 
+  if (templateName === 'investngain_govardhan_puja_greeting') {
+    const imageUrl = String(process.env.GOVARDHAN_HEADER_IMAGE_URL || '').trim();
+
+    if (!/^https:\/\//i.test(imageUrl)) {
+      throw new Error(
+        'GOVARDHAN_HEADER_IMAGE_URL must be set to a public HTTPS image URL in Render.'
+      );
+    }
+
+    template.components = [
+      {
+        type: 'header',
+        parameters: [
+          {
+            type: 'image',
+            image: {
+              link: imageUrl
+            }
+          }
+        ]
+      }
+    ];
+  }
+
   if (templateName === 'by_harsh_2') {
     template.components = [
       {
