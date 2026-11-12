@@ -542,6 +542,47 @@ async function sendTemplate(
   );
 }
 
+
+async function sendTextMessage(recipient, body) {
+  requireWhatsAppConfig();
+
+  return axios.post(
+    `https://graph.facebook.com/v26.0/${PHONE_NUMBER_ID}/messages`,
+    {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: recipient,
+      type: 'text',
+      text: { preview_url: false, body }
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 20000
+    }
+  );
+}
+
+function getButtonAutoReply(message) {
+  const buttonTitle = String(
+    message.button?.text ||
+    message.interactive?.button_reply?.title ||
+    ''
+  ).trim().toLowerCase();
+
+  if (buttonTitle === 'know more') {
+    return 'Thank you for your interest! Our team will share the project details with you shortly.';
+  }
+
+  if (buttonTitle === 'schedule your visit') {
+    return 'Thank you for your interest! Kindly let us know whether Saturday or Sunday would be convenient for you, so we can schedule your visit accordingly.';
+  }
+
+  return null;
+}
+
 // --------------------------------------------------
 // HOME
 // --------------------------------------------------
@@ -745,6 +786,23 @@ app.post(
             console.log(
               'Customer reply recorded. Pending follow-ups are handled by database trigger.'
             );
+
+            // AUTOMATIC REPLIES FOR THE TWO QUICK-REPLY CAMPAIGN BUTTONS
+            const automaticReply = getButtonAutoReply(message);
+            if (automaticReply) {
+              try {
+                const replyResult = await sendTextMessage(phone, automaticReply);
+                console.log('Button auto-reply accepted by Meta:', {
+                  recipient: phone,
+                  messageId: replyResult.data?.messages?.[0]?.id || null
+                });
+              } catch (replyError) {
+                console.error(
+                  'Button auto-reply failed:',
+                  errorDetails(replyError)
+                );
+              }
+            }
           }
 
           // META MESSAGE STATUS UPDATES
