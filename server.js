@@ -48,7 +48,10 @@ const ALLOWED_TEMPLATES = [
   'new_temp',
   'utility_by_harsh',
   'by_harsh_2' ,
-   '4_to_one_'
+   'lnt_template',
+  'experion_2nd_template',
+  'experion_sector80_template',
+  '4_to_one_'
 ];
 
 const MAX_RECIPIENTS = 200;
