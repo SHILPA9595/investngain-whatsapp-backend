@@ -51,7 +51,8 @@ const ALLOWED_TEMPLATES = [
    'lnt_template',
   'experion_2nd_template',
   'experion_sector80_template',
-  '4_to_one_'
+  '4_to_one_',
+  'followup_for_13_14_nov'
 ];
 
 const MAX_RECIPIENTS = 200;
