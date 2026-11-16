@@ -196,6 +196,7 @@ const leadsUrl = () => dbUrl('whatsapp_leads');
 const jobsUrl = () => dbUrl('whatsapp_followup_jobs');
 const campaignsUrl = () => dbUrl('whatsapp_campaigns');
 const campaignMessagesUrl = () => dbUrl('whatsapp_campaign_messages');
+const messagesUrl = () => dbUrl('whatsapp_messages');
 
 async function rpc(name, data) {
   const response = await axios.post(
@@ -366,6 +367,20 @@ function classifyLead(message) {
   }
 
   return 'NEEDS_REVIEW';
+}
+
+function extractMessageText(message) {
+  return String(
+    message.text?.body ||
+    message.button?.text ||
+    message.interactive?.button_reply?.title ||
+    message.interactive?.list_reply?.title ||
+    message.image?.caption ||
+    message.document?.caption ||
+    message.video?.caption ||
+    message.sticker?.id ||
+    ''
+  ).trim().slice(0, 4000);
 }
 
 // --------------------------------------------------
@@ -723,6 +738,42 @@ app.get(
 );
 
 // --------------------------------------------------
+// ADMIN: INCOMING WHATSAPP REPLIES
+// --------------------------------------------------
+
+app.get(
+  '/admin/incoming-replies',
+  requireAdmin,
+  async (req, res) => {
+    try {
+      requireSupabaseConfig();
+
+      const response = await axios.get(messagesUrl(), {
+        params: {
+          select: 'id,phone,direction,message_type,message_text,message_timestamp,created_at',
+          direction: 'eq.inbound',
+          order: 'message_timestamp.desc.nullslast,created_at.desc',
+          limit: 100
+        },
+        headers: supabaseHeaders(),
+        timeout: 10000
+      });
+
+      return res.json({
+        ok: true,
+        replies: response.data || []
+      });
+    } catch (error) {
+      console.error('Incoming replies fetch failed:', errorDetails(error));
+      return res.status(500).json({
+        ok: false,
+        error: 'Could not load incoming WhatsApp replies.'
+      });
+    }
+  }
+);
+
+// --------------------------------------------------
 // META WEBHOOK VERIFICATION
 // --------------------------------------------------
 
@@ -766,6 +817,30 @@ app.post(
               continue;
             }
 
+            const inboundMessageId = message.id || null;
+            const inboundText = extractMessageText(message);
+            const inboundTimestamp = message.timestamp
+              ? new Date(Number(message.timestamp) * 1000).toISOString()
+              : now();
+
+            await axios.post(
+              `${messagesUrl()}?on_conflict=meta_message_id`,
+              {
+                phone,
+                direction: 'inbound',
+                message_type: message.type || 'unknown',
+                message_text: inboundText || null,
+                meta_message_id: inboundMessageId,
+                message_timestamp: inboundTimestamp
+              },
+              {
+                headers: supabaseHeaders({
+                  Prefer: 'resolution=ignore-duplicates,return=minimal'
+                }),
+                timeout: 10000
+              }
+            );
+
             await axios.post(
               `${leadsUrl()}?on_conflict=phone`,
               {
@@ -793,6 +868,23 @@ app.post(
             if (automaticReply) {
               try {
                 const replyResult = await sendTextMessage(phone, automaticReply);
+                await axios.post(
+                  `${messagesUrl()}?on_conflict=meta_message_id`,
+                  {
+                    phone,
+                    direction: 'outbound',
+                    message_type: 'text',
+                    message_text: automaticReply,
+                    meta_message_id: replyResult.data?.messages?.[0]?.id || null,
+                    message_timestamp: now()
+                  },
+                  {
+                    headers: supabaseHeaders({
+                      Prefer: 'resolution=ignore-duplicates,return=minimal'
+                    }),
+                    timeout: 10000
+                  }
+                );
                 console.log('Button auto-reply accepted by Meta:', {
                   recipient: phone,
                   messageId: replyResult.data?.messages?.[0]?.id || null
