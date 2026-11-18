@@ -801,8 +801,8 @@ app.get('/admin/active-buyers', requireAdmin, async (req, res) => {
     });
     return res.json({ ok: true, buyers: response.data || [] });
   } catch (error) {
-    console.error('Active buyers fetch failed:', errorDetails(error));
-    return res.status(500).json({ ok: false, error: 'Could not load interested buyers.' });
+    console.error('Active buyers fetch failed:', error.response?.status || error.code || 'UNKNOWN', errorDetails(error));
+    return res.status(500).json({ ok: false, error: 'Could not load interested buyers.', detail: String(error.response?.data?.message || error.response?.data?.details || error.message || 'Database request failed').slice(0, 300) });
   }
 });
 
@@ -848,8 +848,8 @@ app.post('/admin/active-buyers', requireAdmin, async (req, res) => {
     });
     return res.status(201).json({ok:true,buyer:response.data?.[0] || null,linkedToLead:Boolean(lead)});
   } catch (error) {
-    console.error('Active buyer create failed:', errorDetails(error));
-    return res.status(500).json({ok:false,error:'Could not save interested buyer.'});
+    console.error('Active buyer create failed:', error.response?.status || error.code || 'UNKNOWN', errorDetails(error));
+    return res.status(500).json({ok:false,error:'Could not save interested buyer.',detail:String(error.response?.data?.message || error.response?.data?.details || error.message || 'Database request failed').slice(0,300)});
   }
 });
 
@@ -889,8 +889,8 @@ app.patch('/admin/active-buyers/:id', requireAdmin, async (req, res) => {
     if (!response.data?.length) return res.status(404).json({ok:false,error:'Buyer record not found.'});
     return res.json({ok:true,buyer:response.data[0]});
   } catch (error) {
-    console.error('Active buyer update failed:', errorDetails(error));
-    return res.status(500).json({ok:false,error:'Could not update interested buyer.'});
+    console.error('Active buyer update failed:', error.response?.status || error.code || 'UNKNOWN', errorDetails(error));
+    return res.status(500).json({ok:false,error:'Could not update interested buyer.',detail:String(error.response?.data?.message || error.response?.data?.details || error.message || 'Database request failed').slice(0,300)});
   }
 });
 
