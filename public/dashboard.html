@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Invest N Gain | WhatsApp Campaigns</title>
 <style>
-:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f4f6fa}*{box-sizing:border-box}body{margin:0}.top{background:#111b31;color:white;padding:22px max(20px,calc((100% - 1080px)/2));display:flex;align-items:center;justify-content:space-between}.top h1{font-size:20px;margin:0}.top small{color:#b8c3d8}.wrap{max-width:1080px;margin:28px auto;padding:0 18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{background:#fff;border:1px solid #e2e7f0;border-radius:14px;padding:22px;box-shadow:0 3px 14px #1b2b4810}.wide{grid-column:1/-1}h2{font-size:17px;margin:0 0 8px}.muted{color:#68758b;font-size:13px;line-height:1.5}.field{display:flex;flex-direction:column;gap:7px;margin:14px 0}label{font-size:13px;font-weight:650}input[type=password],input[type=text],input[type=tel],input[type=file]{width:100%;padding:11px 12px;border:1px solid #ccd4e1;border-radius:8px;font:inherit;background:#fff}button{border:0;border-radius:8px;padding:11px 16px;background:#1e5bd7;color:white;font-weight:650;cursor:pointer}button.secondary{background:#eaf0fb;color:#23416e}button:disabled{opacity:.5;cursor:not-allowed}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.status{font-size:12px;padding:6px 10px;border-radius:20px;background:#edf1f7;color:#526078}.status.ok{background:#e7f7ee;color:#176b3a}.status.bad{background:#fff0ef;color:#a62a22}.notice{padding:12px;border-radius:8px;background:#fff8e8;color:#775315;font-size:13px;line-height:1.5;margin-top:12px}.result{white-space:pre-wrap;background:#101a2d;color:#d9e5ff;padding:14px;border-radius:9px;font:12px/1.55 Consolas,monospace;max-height:280px;overflow:auto;margin-top:14px}.check{display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.5;margin:12px 0}.check input{margin-top:3px}.pill{font-size:12px;font-weight:700;color:#254c91;background:#edf3ff;border-radius:20px;padding:5px 9px}@media(max-width:720px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}.top{gap:12px;align-items:flex-start;flex-direction:column}}
+:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#172033;background:#f4f6fa}*{box-sizing:border-box}body{margin:0}.top{background:#111b31;color:white;padding:22px max(20px,calc((100% - 1080px)/2));display:flex;align-items:center;justify-content:space-between}.top h1{font-size:20px;margin:0}.top small{color:#b8c3d8}.wrap{max-width:1080px;margin:28px auto;padding:0 18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{background:#fff;border:1px solid #e2e7f0;border-radius:14px;padding:22px;box-shadow:0 3px 14px #1b2b4810}.wide{grid-column:1/-1}h2{font-size:17px;margin:0 0 8px}.muted{color:#68758b;font-size:13px;line-height:1.5}.field{display:flex;flex-direction:column;gap:7px;margin:14px 0}label{font-size:13px;font-weight:650}input[type=password],input[type=text],input[type=tel],input[type=file]{width:100%;padding:11px 12px;border:1px solid #ccd4e1;border-radius:8px;font:inherit;background:#fff}button{border:0;border-radius:8px;padding:11px 16px;background:#1e5bd7;color:white;font-weight:650;cursor:pointer}button.secondary{background:#eaf0fb;color:#23416e}button:disabled{opacity:.5;cursor:not-allowed}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.status{font-size:12px;padding:6px 10px;border-radius:20px;background:#edf1f7;color:#526078}.status.ok{background:#e7f7ee;color:#176b3a}.status.bad{background:#fff0ef;color:#a62a22}.notice{padding:12px;border-radius:8px;background:#fff8e8;color:#775315;font-size:13px;line-height:1.5;margin-top:12px}.result{white-space:pre-wrap;background:#101a2d;color:#d9e5ff;padding:14px;border-radius:9px;font:12px/1.55 Consolas,monospace;max-height:280px;overflow:auto;margin-top:14px}.check{display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.5;margin:12px 0}.check input{margin-top:3px}.pill{font-size:12px;font-weight:700;color:#254c91;background:#edf3ff;border-radius:20px;padding:5px 9px}.buyer-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 14px}.buyer-grid input,.buyer-grid select{width:100%;padding:11px 12px;border:1px solid #ccd4e1;border-radius:8px;font:inherit;background:#fff}@media(max-width:720px){.buyer-grid{grid-template-columns:1fr 1fr}}@media(max-width:460px){.buyer-grid{grid-template-columns:1fr}}@media(max-width:720px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}.top{gap:12px;align-items:flex-start;flex-direction:column}}
 </style></head>
 <body>
 <header class="top"><div><h1>Invest N Gain Realty</h1><small>WhatsApp Campaign Dashboard</small></div><label for="templateSelect" class="pill">WhatsApp template
@@ -70,6 +70,31 @@
 <div class="row" style="margin:10px 0"><button class="secondary" id="refreshReplies">Refresh replies</button><span class="muted" id="repliesStatus">Save your admin key, then refresh replies.</span></div>
 <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;background:#f3f6fb"><th style="padding:10px">Received</th><th style="padding:10px">Phone</th><th style="padding:10px">Type</th><th style="padding:10px">Message</th></tr></thead><tbody id="repliesRows"><tr><td colspan="4" style="padding:12px;color:#68758b">No replies loaded.</td></tr></tbody></table></div>
 </section>
+<section class="card wide" id="activeBuyersCard">
+<h2>7. Interested Buyers</h2>
+<p class="muted">Shortlist serious buyers separately from your main leads. Saving a buyer does not send a WhatsApp message or change WhatsApp consent.</p>
+<form id="buyerForm" autocomplete="off">
+<input type="hidden" id="buyerId">
+<div class="buyer-grid">
+<div class="field"><label for="buyerName">Customer name *</label><input id="buyerName" type="text" required maxlength="120" placeholder="Customer name"></div>
+<div class="field"><label for="buyerPhone">Phone number *</label><input id="buyerPhone" type="tel" required placeholder="91XXXXXXXXXX"></div>
+<div class="field"><label for="buyerEmail">Email</label><input id="buyerEmail" type="text" placeholder="Email address"></div>
+<div class="field"><label for="buyerPurpose">Buying purpose</label><select id="buyerPurpose"><option value="">Select purpose</option><option>Self-use</option><option>Investment</option></select></div>
+<div class="field"><label for="buyerBudget">Budget</label><input id="buyerBudget" type="text" placeholder="e.g. 1.65 Cr"></div>
+<div class="field"><label for="buyerLocation">Preferred location</label><input id="buyerLocation" type="text" placeholder="e.g. Golf Course Road"></div>
+<div class="field"><label for="buyerPropertyType">Property type</label><select id="buyerPropertyType"><option value="">Select type</option><option>Residential</option><option>Commercial</option><option>Plot / Farmhouse</option></select></div>
+<div class="field"><label for="buyerConfig">Configuration</label><input id="buyerConfig" type="text" placeholder="e.g. 3BHK / 4BHK"></div>
+<div class="field"><label for="buyerProject">Interested project</label><input id="buyerProject" type="text" placeholder="Project name"></div>
+<div class="field"><label for="buyerStatus">Buyer status</label><select id="buyerStatus"><option value="NEW">New</option><option value="INTERESTED">Interested</option><option value="FOLLOW_UP">Follow-up</option><option value="SITE_VISIT">Site visit</option><option value="NEGOTIATION">Negotiation</option><option value="CONVERTED">Converted</option><option value="LOST">Lost</option></select></div>
+<div class="field"><label for="buyerFollowup">Follow-up date</label><input id="buyerFollowup" type="date"></div>
+<div class="field"><label for="buyerNotes">Notes</label><input id="buyerNotes" type="text" placeholder="Requirement / team remarks"></div>
+</div>
+<div class="row"><button type="submit" id="saveBuyer">Save buyer</button><button type="button" class="secondary" id="clearBuyer">Clear form</button><span class="muted" id="buyerFormStatus">* Required fields</span></div>
+</form>
+<div class="row" style="margin:18px 0 10px"><input id="buyerSearch" type="text" placeholder="Search name, phone, project or budget" style="flex:1;min-width:220px"><select id="buyerFilter" style="padding:10px;border:1px solid #ccd4e1;border-radius:8px"><option value="ALL">All statuses</option><option value="NEW">New</option><option value="INTERESTED">Interested</option><option value="FOLLOW_UP">Follow-up</option><option value="SITE_VISIT">Site visit</option><option value="NEGOTIATION">Negotiation</option><option value="CONVERTED">Converted</option><option value="LOST">Lost</option></select><button class="secondary" type="button" id="refreshBuyers">Refresh buyers</button></div>
+<div class="muted" id="buyersStatus">Save your admin key, then refresh buyers.</div>
+<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;background:#f3f6fb"><th style="padding:10px">Customer</th><th style="padding:10px">Phone</th><th style="padding:10px">Budget</th><th style="padding:10px">Location / Project</th><th style="padding:10px">Status</th><th style="padding:10px">Follow-up</th><th style="padding:10px">Action</th></tr></thead><tbody id="buyersRows"><tr><td colspan="7" style="padding:12px;color:#68758b">No buyers loaded.</td></tr></tbody></table></div>
+</section>
 <section class="card wide">
 <h2>Campaign result</h2><p class="muted">API response, accepted, failed and skipped counts yahan dikhenge. Meta acceptance delivery confirmation nahi hoti.</p><div id="result" class="result">Waiting for an action…</div>
 </section>
@@ -130,12 +155,74 @@ async function loadIncomingReplies(){
 }
 $('refreshReplies').onclick=loadIncomingReplies;
 
+let activeBuyerCache=[];
+const buyerFields={customer_name:'buyerName',phone:'buyerPhone',email:'buyerEmail',buying_purpose:'buyerPurpose',budget:'buyerBudget',preferred_location:'buyerLocation',property_type:'buyerPropertyType',configuration:'buyerConfig',interested_project:'buyerProject',buyer_status:'buyerStatus',follow_up_date:'buyerFollowup',notes:'buyerNotes'};
+function clearBuyerForm(){
+  $('buyerForm').reset(); $('buyerId').value=''; $('buyerStatus').value='NEW';
+  $('saveBuyer').textContent='Save buyer'; $('buyerFormStatus').textContent='* Required fields';
+}
+function renderBuyers(){
+  const q=$('buyerSearch').value.trim().toLowerCase();
+  const status=$('buyerFilter').value;
+  const rows=activeBuyerCache.filter(b=>(status==='ALL'||b.buyer_status===status)&&
+    [b.customer_name,b.phone,b.budget,b.preferred_location,b.interested_project,b.email].join(' ').toLowerCase().includes(q));
+  $('buyersRows').innerHTML=rows.length?rows.map(b=>'<tr style="border-top:1px solid #e2e7f0">'+
+    '<td style="padding:10px">'+escapeHtml(b.customer_name||'—')+'</td>'+
+    '<td style="padding:10px;white-space:nowrap">'+escapeHtml(b.phone||'—')+'</td>'+
+    '<td style="padding:10px">'+escapeHtml(b.budget||'—')+'</td>'+
+    '<td style="padding:10px">'+escapeHtml([b.preferred_location,b.interested_project].filter(Boolean).join(' · ')||'—')+'</td>'+
+    '<td style="padding:10px">'+escapeHtml((b.buyer_status||'NEW').replaceAll('_',' '))+'</td>'+
+    '<td style="padding:10px">'+escapeHtml(b.follow_up_date||'—')+'</td>'+
+    '<td style="padding:10px"><button type="button" class="secondary" data-edit-buyer="'+Number(b.id)+'">Edit</button></td></tr>').join(''):
+    '<tr><td colspan="7" style="padding:12px;color:#68758b">No matching interested buyers.</td></tr>';
+  $('buyersRows').querySelectorAll('[data-edit-buyer]').forEach(btn=>btn.onclick=()=>editBuyer(Number(btn.dataset.editBuyer)));
+}
+function editBuyer(id){
+  const b=activeBuyerCache.find(x=>Number(x.id)===id); if(!b)return;
+  $('buyerId').value=b.id;
+  for(const [field,element] of Object.entries(buyerFields)) $(element).value=b[field]??'';
+  $('saveBuyer').textContent='Update buyer';
+  $('buyerFormStatus').textContent='Editing buyer #'+id;
+  $('activeBuyersCard').scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function loadActiveBuyers(){
+  $('buyersStatus').textContent='Loading…';
+  try{
+    const status=$('buyerFilter').value;
+    const r=await fetch('/admin/active-buyers'+(status!=='ALL'?'?status='+encodeURIComponent(status):''),{headers:apiHeaders()});
+    const data=await r.json(); if(!r.ok)throw new Error(data.error||'Could not load buyers.');
+    activeBuyerCache=data.buyers||[];
+    $('buyersStatus').textContent=activeBuyerCache.length+' buyer(s) · Updated '+new Date().toLocaleTimeString();
+    renderBuyers();
+  }catch(e){$('buyersStatus').textContent='Could not load: '+e.message;}
+}
+$('buyerForm').onsubmit=async event=>{
+  event.preventDefault();
+  const id=$('buyerId').value;
+  const payload={};
+  for(const [field,element] of Object.entries(buyerFields)) payload[field]=$(element).value.trim();
+  $('saveBuyer').disabled=true;
+  try{
+    const r=await fetch(id?'/admin/active-buyers/'+encodeURIComponent(id):'/admin/active-buyers',{
+      method:id?'PATCH':'POST',headers:apiHeaders(true),body:JSON.stringify(payload)
+    });
+    const data=await r.json(); if(!r.ok)throw new Error(data.error||'Could not save buyer.');
+    show({success:true,message:id?'Buyer updated.':'Buyer added.',linkedToLead:data.linkedToLead});
+    clearBuyerForm(); await loadActiveBuyers();
+  }catch(e){$('buyerFormStatus').textContent=e.message;show('Buyer save failed: '+e.message);}
+  finally{$('saveBuyer').disabled=false;}
+};
+$('clearBuyer').onclick=clearBuyerForm;
+$('refreshBuyers').onclick=loadActiveBuyers;
+$('buyerFilter').onchange=loadActiveBuyers;
+$('buyerSearch').oninput=renderBuyers;
+
 function escapeHtml(value){
   return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 $('refreshHistory').onclick=loadCampaignHistory;
 
-$('saveKey').onclick=()=>{const k=keyInput.value.trim();if(!k){show('Admin API Key enter karein.');return}localStorage.setItem('ing_admin_key',k);show('Admin key saved in this browser.');loadCampaignHistory();loadIncomingReplies();};
+$('saveKey').onclick=()=>{const k=keyInput.value.trim();if(!k){show('Admin API Key enter karein.');return}localStorage.setItem('ing_admin_key',k);show('Admin key saved in this browser.');loadCampaignHistory();loadIncomingReplies();loadActiveBuyers();};
 $('check').onclick=async()=>{try{const r=await fetch('/admin/whatsapp-connection-check',{headers:apiHeaders()});const d=await r.json();$('connection').textContent=d.ok?'WhatsApp connected':'Connection failed';$('connection').className='status '+(d.ok?'ok':'bad');show(d)}catch(e){show('Connection check failed: '+e.message)}};
 $('sendTest').onclick=async()=>{const recipient=$('testPhone').value.trim();if(!recipient){show('Test recipient number enter karein.');return}if(!confirm('Send '+$('templateSelect').value+' to '+recipient+'?'))return;$('sendTest').disabled=true;try{const r=await fetch('/send-template',{method:'POST',headers:apiHeaders(true),body:JSON.stringify({recipient,templateName:$('templateSelect').value})});const d=await r.json();show({httpStatus:r.status,response:d})}catch(e){show('Request failed: '+e.message)}finally{$('sendTest').disabled=false}};
 $('downloadCsv').onclick=()=>{const blob=new Blob(['phone,consent\n919XXXXXXXXX,yes\n'],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='investngain_whatsapp_campaign.csv';a.click();URL.revokeObjectURL(a.href)};
