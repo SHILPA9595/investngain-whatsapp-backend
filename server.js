@@ -774,6 +774,127 @@ app.get(
 );
 
 // --------------------------------------------------
+ // ADMIN: ACTIVE PROPERTY BUYERS CRM
+ // --------------------------------------------------
+
+const activeBuyersUrl = () => dbUrl('"Active Property Buyers"');
+
+const ACTIVE_BUYER_FIELDS = [
+  'lead_id','customer_name','phone','email','buying_purpose','budget',
+  'preferred_location','property_type','configuration','interested_project',
+  'buyer_status','follow_up_date','notes','shortlisted_at','updated_at'
+];
+
+app.get('/admin/active-buyers', requireAdmin, async (req, res) => {
+  try {
+    requireSupabaseConfig();
+    const params = {
+      select: 'id,' + ACTIVE_BUYER_FIELDS.join(','),
+      order: 'shortlisted_at.desc',
+      limit: 200
+    };
+    if (req.query.status && req.query.status !== 'ALL') {
+      params.buyer_status = 'eq.' + String(req.query.status).toUpperCase();
+    }
+    const response = await axios.get(activeBuyersUrl(), {
+      params, headers: supabaseHeaders(), timeout: 10000
+    });
+    return res.json({ ok: true, buyers: response.data || [] });
+  } catch (error) {
+    console.error('Active buyers fetch failed:', errorDetails(error));
+    return res.status(500).json({ ok: false, error: 'Could not load interested buyers.' });
+  }
+});
+
+app.post('/admin/active-buyers', requireAdmin, async (req, res) => {
+  try {
+    requireSupabaseConfig();
+    const body = req.body || {};
+    const phone = normalizePhone(body.phone);
+    const customer_name = String(body.customer_name || '').trim().slice(0,120);
+    if (!customer_name || !validPhone(phone)) {
+      return res.status(400).json({ ok:false, error:'Customer name and a valid phone number are required.' });
+    }
+    const existing = await axios.get(activeBuyersUrl(), {
+      params: { select:'id,phone', phone:'eq.' + phone, limit:1 },
+      headers:supabaseHeaders(), timeout:10000
+    });
+    if (existing.data?.length) {
+      return res.status(409).json({ ok:false, error:'This phone number is already in Interested Buyers. Please edit the existing record.' });
+    }
+    const lead = await readLeadByPhone(phone);
+    const status = String(body.buyer_status || 'NEW').toUpperCase();
+    const allowed = ['NEW','INTERESTED','FOLLOW_UP','SITE_VISIT','NEGOTIATION','CONVERTED','LOST'];
+    if (!allowed.includes(status)) return res.status(400).json({ok:false,error:'Invalid buyer status.'});
+    const record = {
+      lead_id: lead?.id || null,
+      customer_name,
+      phone,
+      email: String(body.email || '').trim().slice(0,160) || null,
+      buying_purpose: String(body.buying_purpose || '').trim().slice(0,80) || null,
+      budget: String(body.budget || '').trim().slice(0,80) || null,
+      preferred_location: String(body.preferred_location || '').trim().slice(0,160) || null,
+      property_type: String(body.property_type || '').trim().slice(0,80) || null,
+      configuration: String(body.configuration || '').trim().slice(0,80) || null,
+      interested_project: String(body.interested_project || '').trim().slice(0,160) || null,
+      buyer_status: status,
+      follow_up_date: body.follow_up_date || null,
+      notes: String(body.notes || '').trim().slice(0,2000) || null,
+      updated_at: now()
+    };
+    const response = await axios.post(activeBuyersUrl(), record, {
+      headers:supabaseHeaders({Prefer:'return=representation'}),
+      timeout:10000
+    });
+    return res.status(201).json({ok:true,buyer:response.data?.[0] || null,linkedToLead:Boolean(lead)});
+  } catch (error) {
+    console.error('Active buyer create failed:', errorDetails(error));
+    return res.status(500).json({ok:false,error:'Could not save interested buyer.'});
+  }
+});
+
+app.patch('/admin/active-buyers/:id', requireAdmin, async (req, res) => {
+  try {
+    requireSupabaseConfig();
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ok:false,error:'Invalid buyer ID.'});
+    const body = req.body || {};
+    const allowedFields = ['customer_name','email','buying_purpose','budget','preferred_location','property_type','configuration','interested_project','buyer_status','follow_up_date','notes'];
+    const record = {};
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) record[field] = body[field] === '' ? null : body[field];
+    }
+    if (body.phone !== undefined) {
+      const phone = normalizePhone(body.phone);
+      if (!validPhone(phone)) return res.status(400).json({ok:false,error:'Valid phone number required.'});
+      record.phone = phone;
+      const lead = await readLeadByPhone(phone);
+      record.lead_id = lead?.id || null;
+    }
+    if (record.customer_name !== undefined && !String(record.customer_name || '').trim()) {
+      return res.status(400).json({ok:false,error:'Customer name cannot be blank.'});
+    }
+    if (record.buyer_status !== undefined) {
+      record.buyer_status = String(record.buyer_status).toUpperCase();
+      if (!['NEW','INTERESTED','FOLLOW_UP','SITE_VISIT','NEGOTIATION','CONVERTED','LOST'].includes(record.buyer_status)) {
+        return res.status(400).json({ok:false,error:'Invalid buyer status.'});
+      }
+    }
+    record.updated_at = now();
+    const response = await axios.patch(activeBuyersUrl(), record, {
+      params:{id:'eq.'+id},
+      headers:supabaseHeaders({Prefer:'return=representation'}),
+      timeout:10000
+    });
+    if (!response.data?.length) return res.status(404).json({ok:false,error:'Buyer record not found.'});
+    return res.json({ok:true,buyer:response.data[0]});
+  } catch (error) {
+    console.error('Active buyer update failed:', errorDetails(error));
+    return res.status(500).json({ok:false,error:'Could not update interested buyer.'});
+  }
+});
+
+// --------------------------------------------------
 // META WEBHOOK VERIFICATION
 // --------------------------------------------------
 
