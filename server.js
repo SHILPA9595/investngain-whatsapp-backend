@@ -779,6 +779,31 @@ app.get(
 
 const activeBuyersUrl = () => dbUrl('"Active Property Buyers"');
 
+// Search existing WhatsApp leads by phone number. Names are not stored in whatsapp_leads.
+app.get('/admin/lead-search', requireAdmin, async (req, res) => {
+  try {
+    requireSupabaseConfig();
+    const phone = normalizePhone(req.query.phone);
+    if (phone.length < 4) {
+      return res.status(400).json({ ok: false, error: 'Enter at least 4 digits to search.' });
+    }
+    const response = await axios.get(leadsUrl(), {
+      params: {
+        select: 'id,phone,lead_status,last_reply_at,last_message_type,whatsapp_opt_in',
+        phone: 'ilike.*' + phone + '*',
+        order: 'last_reply_at.desc.nullslast,created_at.desc',
+        limit: 25
+      },
+      headers: supabaseHeaders(),
+      timeout: 10000
+    });
+    return res.json({ ok: true, leads: response.data || [] });
+  } catch (error) {
+    console.error('Lead search failed:', error.response?.status || error.code || 'UNKNOWN', errorDetails(error));
+    return res.status(500).json({ ok: false, error: 'Could not search existing leads.' });
+  }
+});
+
 const ACTIVE_BUYER_FIELDS = [
   'lead_id','customer_name','phone','email','buying_purpose','budget',
   'preferred_location','property_type','configuration','interested_project',
