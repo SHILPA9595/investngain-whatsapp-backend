@@ -73,24 +73,29 @@
 <section class="card wide" id="activeBuyersCard">
 <h2>7. Interested Buyers</h2>
 <p class="muted">Shortlist serious buyers separately from your main leads. Saving a buyer does not send a WhatsApp message or change WhatsApp consent.</p>
+<details style="margin:14px 0;border:1px solid #dbe3ee;border-radius:10px;padding:12px">
+<summary style="cursor:pointer;font-weight:600">Optional: Select a buyer from existing WhatsApp leads</summary>
 <div class="card" style="background:#f8fafc;border:1px solid #dbe3ee;margin:12px 0;padding:14px">
-<h3 style="margin:0 0 6px">Add from existing WhatsApp leads</h3>
+<h3 style="margin:0 0 6px">Search existing WhatsApp leads</h3>
 <p class="muted" style="margin:0 0 10px">Search by phone number (the leads table does not store customer names). Select a result to fill the phone number, then enter the customer's name below.</p>
 <div class="row"><input id="existingLeadSearch" type="tel" placeholder="Enter at least 4 phone digits" style="flex:1;min-width:220px"><button type="button" class="secondary" id="searchExistingLeads">Search leads</button></div>
 <div class="muted" id="leadSearchStatus" style="margin:8px 0">Search your existing WhatsApp leads.</div>
 <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;background:#eef2f7"><th style="padding:8px">Phone</th><th style="padding:8px">Lead status</th><th style="padding:8px">Last reply</th><th style="padding:8px">Action</th></tr></thead><tbody id="leadSearchRows"><tr><td colspan="4" style="padding:10px;color:#68758b">No search yet.</td></tr></tbody></table></div>
 </div>
+</details>
+<h3 style="margin:18px 0 8px">Add buyer manually</h3>
+<p class="muted" style="margin:0 0 12px">Enter your own client details below. This does not require the client to exist in WhatsApp leads.</p>
 <form id="buyerForm" autocomplete="off">
 <input type="hidden" id="buyerId">
 <div class="buyer-grid">
 <div class="field"><label for="buyerName">Customer name *</label><input id="buyerName" type="text" required maxlength="120" placeholder="Customer name"></div>
 <div class="field"><label for="buyerPhone">Phone number *</label><input id="buyerPhone" type="tel" required placeholder="91XXXXXXXXXX"></div>
 <div class="field"><label for="buyerEmail">Email</label><input id="buyerEmail" type="text" placeholder="Email address"></div>
-<div class="field"><label for="buyerPurpose">Buying purpose</label><select id="buyerPurpose"><option value="">Select purpose</option><option>Self-use</option><option>Investment</option></select></div>
-<div class="field"><label for="buyerBudget">Budget</label><input id="buyerBudget" type="text" placeholder="e.g. 1.65 Cr"></div>
-<div class="field"><label for="buyerLocation">Preferred location</label><input id="buyerLocation" type="text" placeholder="e.g. Golf Course Road"></div>
-<div class="field"><label for="buyerPropertyType">Property type</label><select id="buyerPropertyType"><option value="">Select type</option><option>Residential</option><option>Commercial</option><option>Plot / Farmhouse</option></select></div>
-<div class="field"><label for="buyerConfig">Configuration</label><input id="buyerConfig" type="text" placeholder="e.g. 3BHK / 4BHK"></div>
+<div class="field"><label for="buyerPurpose">Buying purpose</label><select id="buyerPurpose"><option value="">Select purpose</option><option>Self-use</option><option selected>Investment</option></select></div>
+<div class="field"><label for="buyerBudget">Budget</label><input id="buyerBudget" type="text" value="₹3–5 Cr" placeholder="e.g. 1.65 Cr"></div>
+<div class="field"><label for="buyerLocation">Preferred location</label><input id="buyerLocation" type="text" value="Gurugram" placeholder="e.g. Golf Course Road"></div>
+<div class="field"><label for="buyerPropertyType">Property type</label><select id="buyerPropertyType"><option value="">Select type</option><option selected>Residential</option><option>Commercial</option><option>Plot / Farmhouse</option></select></div>
+<div class="field"><label for="buyerConfig">Configuration</label><input id="buyerConfig" type="text" value="3 BHK" placeholder="e.g. 3BHK / 4BHK"></div>
 <div class="field"><label for="buyerProject">Interested project</label><input id="buyerProject" type="text" placeholder="Project name"></div>
 <div class="field"><label for="buyerStatus">Buyer status</label><select id="buyerStatus"><option value="NEW">New</option><option value="INTERESTED">Interested</option><option value="FOLLOW_UP">Follow-up</option><option value="SITE_VISIT">Site visit</option><option value="NEGOTIATION">Negotiation</option><option value="CONVERTED">Converted</option><option value="LOST">Lost</option></select></div>
 <div class="field"><label for="buyerFollowup">Follow-up date</label><input id="buyerFollowup" type="date"></div>
