@@ -165,7 +165,7 @@ $('refreshReplies').onclick=loadIncomingReplies;
 let activeBuyerCache=[];
 async function searchExistingLeads(){
   const term=$('existingLeadSearch').value.trim();
-  if(term.replace(/\\D/g,'').length<4){$('leadSearchStatus').textContent='Enter at least 4 digits.';return}
+  if(term.replace(/\D/g,'').length<4){$('leadSearchStatus').textContent='Enter at least 4 digits.';return}
   $('leadSearchStatus').textContent='Searching…';
   $('leadSearchRows').innerHTML='<tr><td colspan="4" style="padding:10px">Searching…</td></tr>';
   try{
@@ -173,7 +173,7 @@ async function searchExistingLeads(){
     const data=await r.json();if(!r.ok)throw new Error(data.error||'Lead search failed.');
     const leads=data.leads||[];
     $('leadSearchRows').innerHTML=leads.length?leads.map(l=>{
-      const existing=activeBuyerCache.some(b=>String(b.phone||'').replace(/\\D/g,'')===String(l.phone||'').replace(/\\D/g,''));
+      const existing=activeBuyerCache.some(b=>String(b.phone||'').replace(/\D/g,'')===String(l.phone||'').replace(/\D/g,''));
       const reply=l.last_reply_at?new Date(l.last_reply_at).toLocaleString():'—';
       return '<tr style="border-top:1px solid #e2e7f0">'+
         '<td style="padding:8px;white-space:nowrap">'+escapeHtml(l.phone||'—')+'</td>'+
