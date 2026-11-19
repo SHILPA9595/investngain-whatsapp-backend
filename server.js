@@ -847,7 +847,9 @@ app.post('/admin/active-buyers', requireAdmin, async (req, res) => {
     if (existing.data?.length) {
       return res.status(409).json({ ok:false, error:'This phone number is already in Interested Buyers. Please edit the existing record.' });
     }
-    const lead = await readLeadByPhone(phone);
+    // Manual Interested Buyer entries are independent external-client records.
+    // Do not look up or modify whatsapp_leads, and do not infer WhatsApp consent.
+    const lead = null;
     const status = String(body.buyer_status || 'NEW').toUpperCase();
     const allowed = ['NEW','INTERESTED','FOLLOW_UP','SITE_VISIT','NEGOTIATION','CONVERTED','LOST'];
     if (!allowed.includes(status)) return res.status(400).json({ok:false,error:'Invalid buyer status.'});
